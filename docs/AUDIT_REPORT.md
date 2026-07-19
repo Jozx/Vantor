@@ -1,270 +1,367 @@
-# Vantor — Comprehensive Audit Report
+# Vantor — Audit Report
 
-**Date:** 2026-07-18 (updated)
-**Scope:** Phases 15–19 complete codebase. Four areas: Functional Correctness, UI/UX, Security, Best Practices / Code Quality
-**Method:** Automated parallel sweep of all source files in `src/`, cross-referenced with `docs/ARCHITECTURE.md`
-
----
-
-## Changelog
-
-| Date | Changes |
-|------|---------|
-| 2026-07-18 | Initial audit |
-| 2026-07-18 | Fixed: 1.1, 1.4, 1.6, 1.7, 1.16, 2.1, 2.3, 2.4, 2.5, 2.6, 2.8, 3.1, 3.3, 4.1, 4.2, 4.3, 4.6, 4.7, 4.8, 4.9, dashboard card navigation |
-| 2026-07-18 | New findings: 2.13 (AccountDetails useEffect/loadData duplication), 2.14 (select focus ring consistency) |
-| 2026-07-18 | Fixed round 2: ~~1.2~~, ~~1.3~~, ~~2.2~~, ~~2.3~~, ~~2.4~~, ~~2.5~~, ~~3.1~~, ~~3.2~~ |
+**Date:** 2026-07-18
+**Scope:** Full codebase re-audit after two rounds of fixes. All services, repos, pages, components, config.
+**Method:** Parallel sweep of every source file, cross-referencing findings across layers.
 
 ---
 
-## 1. Functional Correctness Against Spec
+## 1. Functional Correctness
 
-### 1.1 PASS — Buy Flow: Negative-Cash Check Location
+### 1.1 CRITICAL — `AccountRepo.VALID_COLUMNS` Missing Columns Silently Drops Accrual Updates
 
-**File:** `src/services/financeService.ts:105-187`
-**Status:** The buy flow is wrapped in a single SQLite transaction (BEGIN/COMMIT/ROLLBACK). The negative-cash check occurs after inserting the `buy_debit` but before COMMIT. If `runningBalance() < 0`, it throws, causing ROLLBACK. Correct pattern (insert-then-verify inside the transaction).
+**File:** `src/db/repos/AccountRepo.ts:42`
+**Description:** `VALID_COLUMNS` only contains `['name', 'type', 'currency', 'opening_balance']`. Five real columns are excluded: `institution`, `yield_rate`, `last_accrual_date`, `credit_limit`, `opening_date`. Any `update()` call with these fields is silently dropped.
+**Impact:** `financeService.ts:513` calls `repos.accounts.update(fund.id, { last_accrual_date: today }, false)`. Since `last_accrual_date` is not in `VALID_COLUMNS`, the update is a no-op. The accrual engine inserts `interest_accrual` transactions but never records that it ran, causing **duplicate accruals on every app launch**.
+**Fix:** Expand to: `new Set(['name', 'type', 'currency', 'institution', 'opening_balance', 'opening_date', 'yield_rate', 'last_accrual_date', 'credit_limit'])`.
 
-### ~~1.2 MEDIUM — No Input Validation on `addCashTransaction`~~ ✓ FIXED
+### 1.2 CRITICAL — `HoldingRepo.VALID_COLUMNS` Contains Phantom Columns
 
-**File:** `src/services/financeService.ts:63-70`
-**Fix:** Added `VALID_CASH_TYPES` array and explicit type validation: `if (!VALID_CASH_TYPES.includes(data.type)) throw new Error(...)`. Verified with lint + tsc.
+**File:** `src/db/repos/HoldingRepo.ts:25`
+**Description:** `VALID_COLUMNS` contains `['account_id', 'symbol', 'quantity', 'average_cost']`. The `holdings` table columns are `id, account_id, symbol, currency, market`. `quantity` and `average_cost` do not exist — they are computed at the service layer. Meanwhile `currency` and `market` are real columns missing from the set.
+**Fix:** Change to `new Set(['account_id', 'symbol', 'currency', 'market'])`.
 
-### ~~1.3 MEDIUM — FX Conversion Silent Fallback to 1:1~~ ✓ FIXED
+### 1.3 CRITICAL — `SCHEMA_VERSION = 5` But Migration Code Goes to v6
 
-**File:** `src/services/financeService.ts:624-632`
-**Fix:** `getFxConversion()` now returns `{ rate, isFallback }` object. `getCashFlowSankeyData()` tracks fallback usage and returns `usedFallbackFx` flag. CashFlow.tsx displays an amber warning banner when fallback rates are used.
+**File:** `src/db/migrate.ts:5`
+**Description:** `SCHEMA_VERSION` is `5`, but lines 301-307 contain a v5→v6 migration block that creates performance indexes. The guard at line 188 (`if (currentVersion >= SCHEMA_VERSION) return`) short-circuits when `user_version` reaches 5, so the v6 indexes (`idx_security_transactions_occurred`, `idx_cash_transactions_type`, `idx_accounts_type`) are **never created** on existing databases.
+**Fix:** Change line 5 to `const SCHEMA_VERSION = 6`.
 
-### 1.4 MEDIUM — `getCardDebtBalance` Uses Different Sign Convention Than `runningBalance`
+### 1.4 CRITICAL — `computeNetWorth` Cross-Currency Totals Are Always Incomplete
 
-**File:** `src/services/financeService.ts:196-221` vs `src/db/repos/CashLedgerRepo.ts:118-152`
-**Description:** `runningBalance()` treats `charge` as negative and `payment` as positive. `getCardDebtBalance()` uses a separate SQL that treats charges as positive and payments as negative, wrapping the result in `Math.abs()`. The two functions can give different results for the same account. This works in practice because the UI uses `getCardDebtBalance()` for credit cards and `getCashBalance()` for others, but the inconsistency is fragile.
-**Suggested Fix:** Document the convention clearly. Consider unifying into a single function with a parameter.
+**File:** `src/services/financeService.ts:840-860`
+**Description:** When `baseCurrency === 'PYG'`, `totalPyg` sums all accounts (correct). But `totalUsd` only sums raw USD account balances — PYG accounts are never converted into USD for `totalUsd`. The same mirror problem exists when `base = 'USD'`. The non-base-currency total is always incomplete.
+**Fix:** When computing totals, always convert every account to both base and non-base currency using batch FX rates.
 
-### 1.5 PASS — Average Cost Recalculation on Buy
+### 1.5 HIGH — N+1 Queries in `computeNetWorth` for Holdings
 
-**File:** `src/db/repos/SecurityLedgerRepo.ts:122-145`
-**Status:** Correct. `average_cost = total buy cost / total buy quantity`. Sells do not affect average cost. Matches standard weighted-average cost basis.
+**File:** `src/services/financeService.ts:820-828`
+**Description:** For every holding in every broker account, two individual queries are issued: `netPosition(holding.id)` and `latestSecurityPrice(holding.symbol)`. Batch methods exist (`netPositionsBatch` at line 90, `latestSecurityPriceBatch` pattern in MarketDataRepo) but are not used here.
+**Fix:** Batch-fetch all positions and prices before the loop.
 
-### 1.6 PASS — Quantity-Only Reduction on Sell
+### 1.6 HIGH — `sellSecurity` Position Check Outside Transaction (Race Condition)
 
-**File:** `src/db/repos/SecurityLedgerRepo.ts:142`
-**Status:** Correct. `net_quantity = buyQty - sellQty`. Average cost uses only buy totals.
+**File:** `src/services/financeService.ts:917-924`
+**Description:** The net position check (`quantity > currentQuantity`) happens at line 917, **before** `beginTransaction()` at line 924. Two concurrent sells for the same holding could both pass the check and both insert, resulting in overselling.
+**Fix:** Move the position check inside the transaction block.
 
-### 1.7 PASS — Accrual Engine Formula
+### 1.7 HIGH — `chargeCreditCard` Limit Check Outside Transaction (Race Condition)
 
-**File:** `src/services/financeService.ts:445-504`
-**Status:** Formula is correct: `dailyRate = (1 + yield_rate/100)^(1/365) - 1`, compounded via `balance * ((1 + dailyRate)^days - 1)`.
+**File:** `src/services/financeService.ts:261-268`
+**Description:** The balance+limit check (`currentDebt + amount > credit_limit`) happens outside the transaction (which begins at line 268). Two concurrent charges could both pass the limit check.
+**Fix:** Move the limit check inside the transaction block.
 
-### 1.8 PASS — Accrual Engine Double-Apply Protection
+### 1.8 HIGH — `buySecurity` Holding Find-or-Create Needs `IMMEDIATE` Transaction
 
-**File:** `src/services/financeService.ts:459`
-**Status:** Correct. `if (lastAccrual >= today) continue;` prevents double-apply. `last_accrual_date` is updated atomically within the same transaction.
+**File:** `src/services/financeService.ts:149-153`
+**Description:** The find-or-create logic reads `findByAccountId` then creates if not found. With SQLite's default `DEFERRED` transaction, two concurrent buys for the same symbol could both read "no holding" before either writes, creating duplicate holdings.
+**Fix:** Use `db.execute('BEGIN IMMEDIATE TRANSACTION')` for buy/sell operations.
 
-### 1.9 PASS — Buy/Sell Atomicity
+### 1.9 MEDIUM — UTC Date Computation Mismatch
 
-**Status:** Both `buySecurity()` and `sellSecurity()` use `BEGIN TRANSACTION` / `COMMIT` / `ROLLBACK` wrapping all inserts. Both insert security + cash transactions within the same transaction. Correct.
+**Files:** `src/services/financeService.ts:467`, `src/components/QuickTransaction.tsx:45,89`, `src/services/netWorthService.ts:21`
+**Description:** `new Date().toISOString().split('T')[0]` computes the date in UTC, not the user's local timezone. For users in timezones ahead of UTC (e.g., UTC-5 Paraguay), at 10 PM local the computed "today" is already tomorrow. The accrual engine would accrue for a date that hasn't started locally.
+**Fix:** Use `new Date(new Date().toLocaleDateString('en-CA'))` or a local date helper.
 
-### 1.10 PASS — Balances Are Never Set Directly
+### 1.10 MEDIUM — `netWorthService` 24h Throttle Can Suppress Daily Snapshots
 
-**Status:** All balances are derived from ledger queries (`runningBalance`, `netPosition`). No denormalized balance column exists. `opening_balance` is the only directly-set value, and it is the initial seed for derivation.
+**File:** `src/services/netWorthService.ts:31-36`
+**Description:** The throttle compares `Date.now()` against the previous snapshot's midnight-UTC timestamp. If the last snapshot was at 11:59 PM UTC and the next call is at 12:01 AM UTC the next day, only 2 minutes elapsed — the throttle blocks the computation even though a new calendar day has started.
+**Fix:** Compare calendar dates, not elapsed milliseconds.
 
-### 1.11 PASS — Sankey Balancing/Deficit Logic
+### 1.11 MEDIUM — `dbPendingPromise` Never Cleared on Rejection
 
-**File:** `src/services/financeService.ts:712-731`
-**Status:** Savings or Deficit node ensures diagram balances. Correct.
+**File:** `src/db.ts:136-138`
+**Description:** If the initialization promise rejects, `dbPendingPromise = null` (line 137) is never reached. Every subsequent call to `getDb()` returns the same rejected promise, making the connection unrecoverable.
+**Fix:** Wrap in `try/finally` to ensure cleanup: `try { result = await dbPendingPromise; } finally { dbPendingPromise = null; }`.
 
-### ~~1.12 LOW — QuickTransaction Shows `opening_balance` Instead of Current Balance~~ ✓ FIXED
+### 1.12 MEDIUM — Transaction Rollback Failure Swallows Original Error
 
-**File:** `src/components/QuickTransaction.tsx:342-346`
-**Fix:** Already uses `balanceMap.get(selectedAccount.id) ?? 0` from `getCashBalanceBatch()`. Verified: balance display is correct.
+**Files:** `src/services/financeService.ts:195-198, 283-286, 351-354, 419-422, 516-519, 950-953`
+**Description:** Every `catch` block does `await db.rollbackTransaction(); throw e`. If `rollbackTransaction()` itself throws, the original exception is lost.
+**Fix:** Use `catch` + `finally` pattern, or wrap rollback in its own try/catch.
+
+### 1.13 LOW — `SankeyDiagramData.nodes` Type Drops `color` Property
+
+**File:** `src/services/financeService.ts:607`
+**Description:** `nodes` is typed as `Array<{ name: string }>` but the function pushes objects with `color`. Consumers cannot access `color` without type assertion.
+**Fix:** Add `color?: string` to the node type.
+
+### 1.14 LOW — `VALID_CASH_TYPES` Duplicated with Sankey Hardcoded Types
+
+**File:** `src/services/financeService.ts:48-51, 663`
+**Description:** `VALID_CASH_TYPES` array exists but the Sankey query hardcodes `ct.type IN ('income', 'expense', 'charge')` separately. If a new type is added, both locations need independent updates.
+**Fix:** Reference `VALID_CASH_TYPES` or a shared constant.
 
 ---
 
 ## 2. UI/UX
 
-### 2.1 HIGH — Desktop Sidebar Navigation Hidden
+### 2.1 HIGH — CashFlow "This Month" Shows Wrong Month After Interaction
 
-**File:** `src/App.tsx:171`
-**Description:** The hamburger menu that opens the sidebar (containing Transactions, Cash Flow, DB Health) is `sm:hidden` — it disappears on desktop. There is no desktop sidebar. On tablet/desktop, these three sections are effectively inaccessible.
-**Suggested Fix:** Show a persistent sidebar on `sm:` breakpoint, or add these items to the bottom tab bar.
+**File:** `src/pages/CashFlow.tsx:76, 86-92`
+**Description:** When `periodMode` is `'thisMonth'`, the period uses `selectedMonth` state. If the user switches to "Specific Month", picks a different month (e.g., March), then switches back to "This Month", `selectedMonth` remains at the previously selected value. "This Month" shows March data instead of the actual current month.
+**Fix:** Reset `selectedMonth` when switching to `thisMonth`, or compute the month directly from `new Date()` in the `period` memo when `periodMode === 'thisMonth'`.
 
-### ~~2.2 MEDIUM — Touch Targets Below 44px Minimum~~ ✓ FIXED
+### 2.2 HIGH — Settings Error Messages Display in Green (Same as Success)
 
-| Element | File:Line | Before | After |
-|---------|-----------|--------|-------|
-| Export button | `Home.tsx` | 28px (`size: 'sm'`) | 44px (`min-h-[44px]`) |
-| Import button | `Home.tsx` | 28px (`size: 'sm'`) | 44px (`min-h-[44px]`) |
-| Sell Position button | `AccountDetails.tsx` | 24px (`size: 'xs'`) | 44px (`size: 'sm'` + `min-h-[44px]`) |
-| Account Edit button | `Accounts.tsx:411` | 36px | 44px |
-| Account Delete button | `Accounts.tsx:418` | 36px | 44px |
+**File:** `src/pages/Settings.tsx:66-67, 213`
+**Description:** Error messages from `handleSave` are displayed with `text-emerald-600 dark:text-emerald-400`, identical to success messages. "Failed to save" appears as green text. The refresh message color check uses `includes('failed')` which is case-sensitive and fragile.
+**Fix:** Use `text-rose-600 dark:text-rose-400` for error messages. Use `type` state instead of string matching.
 
-Remaining below 44px: bottom tab items (~36px), theme toggle (32px). These are icon-only in fixed containers where size increase is constrained by layout.
+### 2.3 HIGH — Settings Initial Load Failure Leaves Spinner With No Error
 
-### ~~2.3 LOW — CashFlow Summary Uses Abbreviated Format Without Currency Symbol~~ ✓ FIXED
+**File:** `src/pages/Settings.tsx:46-47`
+**Description:** If `getSettings()` or `getMarketDataStatus()` fails, the error is only logged to console. The `finally` block sets loading to false but no error state is set. The page shows an empty state with no error message or retry option.
+**Fix:** Add error state handling in the catch block.
 
-**File:** `src/pages/CashFlow.tsx:213-241`
-**Fix:** Summary cards (Income, Expenses, Net) now use `formatMoney(value, baseCurrency)` instead of `formatAmount(value) + baseCurrency`. Sankey tooltip still uses `formatAmount()` for compact representation (appropriate for diagram nodes).
+### 2.4 HIGH — AccountDetails Non-Numeric Account ID Gives Silent Blank Page
 
-### ~~2.4 LOW — Transactions Page Lacks Summary Context~~ ✓ FIXED
+**File:** `src/pages/AccountDetails.tsx:44`
+**Description:** `parseInt(id || '0')` gives `0` for non-numeric params. `loadData()` returns early when `accountId` is falsy (0), leaving the page in a perpetual loading state with no error message for routes like `/accounts/abc`.
+**Fix:** Check for NaN after parseInt and set an error message.
 
-**File:** `src/pages/Transactions.tsx:156-176`
-**Fix:** Subtitle now dynamically reflects active filters: shows account name, transaction type, tag name, and/or date range. Falls back to "All cash transactions across your accounts" when no filters are active.
+### 2.5 HIGH — Home Chart Grid Lines Invisible in Dark Mode
 
-### ~~2.5 MEDIUM — AccountDetails useEffect/loadData Duplication~~ ✓ FIXED
+**File:** `src/pages/Home.tsx:392`
+**Description:** `CartesianGrid` has hardcoded light-mode stroke `stroke="#e4e4e7"`. In dark mode, the grid lines are nearly invisible against the dark background.
+**Fix:** Use conditional stroke based on theme.
 
-**File:** `src/pages/AccountDetails.tsx:97-172`
-**Fix:** Refactored `loadData` to accept an optional `AbortSignal`. The `useEffect` now creates an `AbortController`, calls `loadData(controller.signal)`, and aborts on cleanup. Single source of truth, no duplication. Lint rule `react-hooks/set-state-in-effect` suppressed inline (false positive — setState happens async, not synchronously).
+### 2.6 MEDIUM — Transactions Filter Changes: No Loading Indicator, No Race Protection
 
-### 2.6 PASS — Currency Formatting
+**File:** `src/pages/Transactions.tsx:83-87`
+**Description:** Filter changes trigger re-fetch with no loading indicator. No `cancelled` flag means rapid filter changes can complete out of order, showing stale data from an earlier request.
+**Fix:** Add loading state for filter-triggered re-fetches. Add `cancelled` flag in the filter effect.
 
-`formatMoney()` in `src/lib/utils.ts` correctly handles PYG (no decimals, `Gs.` prefix) and USD (2 decimals, `$` prefix) via `Intl.NumberFormat`.
+### 2.7 MEDIUM — AccountDetails Sequential Price Fetching (N+1)
 
-### 2.7 PASS — Empty/Loading/Error States
+**File:** `src/pages/AccountDetails.tsx:138-144`
+**Description:** Market prices are fetched sequentially with individual `await` calls in a `for...of` loop. For many holdings, this is very slow.
+**Fix:** Use `Promise.allSettled()`.
 
-| Page | Empty | Loading | Error |
-|------|-------|---------|-------|
-| Home | YES | YES | YES |
-| Accounts | YES | YES | YES |
-| AccountDetails | YES | YES | YES |
-| Transactions | YES | YES | YES |
-| CashFlow | YES | YES | YES |
-| Health | N/A | YES | YES |
+### 2.8 MEDIUM — Sankey Diagram Fixed 800px Width (Not Responsive)
+
+**File:** `src/pages/CashFlow.tsx:255`
+**Description:** `<Sankey width={800}>` overflows on mobile screens.
+**Fix:** Use a responsive container or measure parent width.
+
+### 2.9 MEDIUM — `importExportService` Row-by-Row Inserts Without Batching
+
+**File:** `src/services/importExportService.ts:300`
+**Description:** Each row is inserted with an individual `db.run()` call. For large imports, this creates thousands of round-trips.
+**Fix:** Use batch inserts with parameterized `INSERT INTO ... VALUES (...), (...), (...)`.
+
+### 2.10 MEDIUM — Non-Migrations Not Atomic
+
+**File:** `src/db/migrate.ts:207-227, 237-292`
+**Description:** Table recreation in v1→v2 and v3→v4 migrations drop and recreate tables without wrapping the sequence in a transaction. A crash between `DROP TABLE` and `RENAME` permanently loses data.
+**Fix:** Wrap each migration step in a transaction.
+
+### 2.11 LOW — QuickTransaction Redundant Ternary (Dead Code)
+
+**File:** `src/components/QuickTransaction.tsx:131-133`
+**Description:** Both branches of the ternary execute identical logic: `accounts.find((a) => a.id === fromAccountId)`.
+**Fix:** Simplify to a single expression.
+
+### 2.12 LOW — CashFlow `mountedRef` Set But Never Read
+
+**File:** `src/pages/CashFlow.tsx:94`
+**Description:** `mountedRef` is declared and set to `true` but never read anywhere.
+**Fix:** Remove it.
+
+### 2.13 LOW — Health.tsx `animate-pulse` Never Stops
+
+**File:** `src/pages/Health.tsx:64`
+**Description:** The `Database` icon pulses indefinitely even after connection status resolves.
+**Fix:** Stop pulsing once status is determined.
+
+### 2.14 LOW — Accounts.tsx `resetForm` Clears Page-Level Error
+
+**File:** `src/pages/Accounts.tsx:119`
+**Description:** `resetForm()` calls `setError('')`, clearing any displayed load error when the create modal opens.
+**Fix:** Don't clear page-level error in resetForm.
+
+### 2.15 LOW — Accounts.tsx `openingBalance` Inconsistent Initial State
+
+**File:** `src/pages/Accounts.tsx:57 vs 115`
+**Description:** Initial state is `''` but `resetForm()` sets it to `'0'`. After form reset, the field shows `"0"` instead of empty.
+**Fix:** Make both use the same initial value.
 
 ---
 
 ## 3. Security
 
-### ~~3.1 MEDIUM — No Future-Dated Transaction Validation~~ ✓ FIXED
+### 3.1 LOW — SQL Table Name Interpolation (Defense-in-Depth)
 
-**File:** `src/pages/AccountDetails.tsx` (charge, payment, cash transaction forms)
-**Fix:** Added inline amber warning ("This date is in the future.") below all three date inputs when the selected date exceeds today. Non-blocking — warns but allows submission.
-
-### ~~3.2 MEDIUM — Dynamic SET Clause Column Names Not Runtime-Validated~~ ✓ FIXED
-
-**Files:** All 7 repo `update()` methods
-**Fix:** Each repo now has a `private static VALID_COLUMNS = new Set([...])` allowlist. The `Object.entries(data).filter()` now checks `[col, v] => v !== undefined && Repo.VALID_COLUMNS.has(col)`. Unknown column names are silently dropped. Repos fixed: AccountRepo, HoldingRepo, TagRepo, CashLedgerRepo, SecurityLedgerRepo, NetWorthSnapshotRepo, SettingsRepo.
-
-### 3.3 LOW — `DELETE FROM ${tableName}` String Interpolation
-
-**File:** `src/services/importExportService.ts:257`
-**Description:** Table name comes from the hardcoded `TABLE_ORDER` constant, never from user input. Not exploitable. Noted for defense-in-depth.
-**Suggested Fix:** Optional allowlist check against `TABLE_ORDER`.
-
-### 3.4 PASS — All SQL Is Parameterized
-
-Grep for string-concatenated query values found zero instances. All user-provided values use `?` placeholders. Column names in dynamic SET clauses are TypeScript-constrained.
-
-### 3.5 PASS — API Keys Not Logged
-
-No `console.log` statements in production code. All 20 `console.error` calls log only error objects, never API keys or secrets.
-
-### 3.6 PASS — API Keys Not in Build Artifacts
-
-API keys are stored only in the SQLite database at runtime. Never embedded in source code, environment variables, or bundled files.
-
-### 3.7 PASS — Export Contains Only User Data
-
-No debug data, seed data, or sample data is exported beyond what exists in the database.
-
-### 3.8 PASS — Data-at-Rest Encryption (Phase 19)
-
-- `capacitor.config.ts`: `androidIsEncryption: true` ✓
-- `src/db.ts:31-35`: Passphrase generated via `crypto.getRandomValues(new Uint8Array(32))` — cryptographically random 256-bit ✓
-- `src/db.ts:90-92`: Stored via `sqliteConnection.setEncryptionSecret()` which uses Android Keystore ✓
-- `src/db.ts:84-85`: Browser mode documented as unencrypted in code comments ✓
-- `docs/ARCHITECTURE.md`: Encryption section documents browser-mode limitation ✓
-- Verified on emulator: pulled `.db` file has SQLCipher header (`8e12 9bfb`), not standard SQLite header ✓
+**File:** `src/services/importExportService.ts:268`
+**Description:** `DELETE FROM ${tableName}` interpolates a string directly into SQL. Source is the hardcoded `TABLE_ORDER` constant, so no active vulnerability. Fragile if future developers add user-controlled values.
+**Status:** Acceptable risk. Noted for defense-in-depth.
 
 ---
 
-## 4. Best Practices / Code Quality
+## 4. Accessibility
 
-### 4.1 MEDIUM — Direct DB Calls Bypassing Repository Layer
+### 4.1 HIGH — No `aria-current="page"` on Active Nav Links
 
-**File:** `src/services/financeService.ts`
-**Description:** Three functions use `db.query()` directly for multi-table JOINs:
-- `getCardDebtBalance()` (line 204)
-- `getAllCashTransactions()` (line 555)
-- `getCashFlowSankeyData()` (line 637)
+**File:** `src/App.tsx:110-112, 193-195, 223-225`
+**Description:** Active navigation links in the mobile Sidebar, DesktopSidebar, and BottomTabs use visual highlighting but none set `aria-current="page"`. Screen readers cannot determine which page is active.
 
-These queries are not expressible through single-table repository methods, but they break architectural separation.
-**Suggested Fix:** Move these queries into `CashLedgerRepo` as named methods (e.g., `findAllWithJoins(filter)`, `findForSankeyPeriod(from, to)`).
+### 4.2 HIGH — QuickTransaction Modal Missing ARIA and Keyboard Support
 
-### 4.2 MEDIUM — Transaction Boundaries Not Supported by Repository Abstraction
+**File:** `src/components/QuickTransaction.tsx:253`
+**Description:** The modal has no `role="dialog"`, no `aria-modal="true"`, no `aria-labelledby`. No focus trapping. No Escape key handler. Keyboard users can Tab behind the overlay.
 
-**Files:** All service files that use `BEGIN/COMMIT/ROLLBACK`
-**Description:** Every multi-step atomic operation (`buySecurity`, `sellSecurity`, `payCreditCard`, `transferBetweenAccounts`, `chargeCreditCard`, `runAccrualEngine`, `commitImport`) calls `db.execute('BEGIN/COMMIT/ROLLBACK')` directly. The repository layer has no transaction utility.
-**Suggested Fix:** Add a `db.transaction(fn)` utility to the repository layer.
+### 4.3 MEDIUM — Multiple Forms Missing `label`/`htmlFor` Associations
 
-### 4.3 LOW — `idx_cash_transactions_linked` Created But Never Queried
+**Files:** `src/components/QuickTransaction.tsx` (all form controls), `src/pages/AccountDetails.tsx`, `src/pages/Accounts.tsx`, `src/pages/Settings.tsx`
+**Description:** Form inputs and selects have visual labels but no `id`/`htmlFor` associations, breaking programmatic label linkage for screen readers and autofill.
 
-**File:** `src/db/migrate.ts:288`
-**Description:** The index on `linked_transaction_id` is created in migration v4, but no repository method or service function ever queries `WHERE linked_transaction_id = ?`.
-**Suggested Fix:** Keep for future use, or remove if not planned.
+### 4.4 MEDIUM — Sort Column Headers Not Keyboard Accessible
 
-### 4.4 LOW — `eslint-disable` Comments
+**File:** `src/pages/Transactions.tsx:306-346`
+**Description:** Sortable `<th>` elements have `onClick` but no keyboard event handler and no `role="button"` indicator.
 
-| File | Rule Disabled |
-|------|---------------|
-| `CashFlow.tsx` | `@typescript-eslint/no-explicit-any` (Recharts Sankey node casting) |
-| `Transactions.tsx` | `react-hooks/exhaustive-deps` (filter-change effect) |
-| `ThemeProvider.tsx` | `react-hooks/exhaustive-deps` (mount-only effect) |
-| `AccountDetails.tsx` | `react-hooks/set-state-in-effect` (async loadData in useEffect) |
-| `AccountDetails.tsx` | `react-hooks/exhaustive-deps` (accountId-only dep) |
+### 4.5 LOW — Theme Toggle Missing `aria-label`
 
-### 4.5 PASS — No TODO/FIXME/HACK/XXX Comments
+**File:** `src/App.tsx:63-69`
+**Description:** The `ThemeToggle` button has a `title` attribute but no `aria-label`. Title is not reliably announced by screen readers.
 
-All source files searched. Codebase is clean of deferred work markers.
+### 4.6 LOW — Bottom Tabs Visible on Desktop
 
-### 4.6 PASS — No Unused Imports
+**File:** `src/App.tsx:219`
+**Description:** `BottomTabs` is always visible at `sm+` breakpoints where the `DesktopSidebar` also provides navigation. The `sm:pb-6` removes padding but the fixed bottom bar still overlaps content.
+**Fix:** Hide `BottomTabs` on `sm+` screens.
 
-All imports across all files are actively referenced.
+---
 
-### 4.7 PASS — `pnpm audit` Clean
+## 5. Code Quality
 
-```
-No known vulnerabilities found
-```
+### 5.1 MEDIUM — 5 `eslint-disable` Comments
 
-### 4.8 PASS — No Suspicious Dependencies
+| File | Rule | Reason |
+|------|------|--------|
+| `CashFlow.tsx` | `@typescript-eslint/no-explicit-any` | Recharts Sankey node casting |
+| `Transactions.tsx` | `react-hooks/exhaustive-deps` | Filter-change effect |
+| `ThemeProvider.tsx` | `react-hooks/exhaustive-deps` | Mount-only effect |
+| `AccountDetails.tsx` | `react-hooks/set-state-in-effect` | Async loadData in useEffect |
+| `AccountDetails.tsx` | `react-hooks/exhaustive-deps` | accountId-only dep |
 
-All packages are legitimate and well-known. No typosquatted names. No postinstall scripts.
+### 5.2 MEDIUM — Test Coverage ~15%
 
-### 4.9 PASS — ARCHITECTURE.md Encryption Documentation
+Only 4 of 26+ exported functions are tested (partially). Zero coverage for: `netWorthService`, `marketService`, `importExportService`, `migrate`, all 8 repos, `utils`. Critical untested functions: `buySecurity`, `sellSecurity`, `chargeCreditCard`, `payCreditCard`, `transferBetweenAccounts`, `runAccrualEngine`, `addCashTransaction`.
 
-`docs/ARCHITECTURE.md` documents the encryption design, how it works, and the browser-mode limitation. The in-app Health page also shows encryption status.
+### 5.3 LOW — `oxlint` DevDependency Unused
+
+**File:** `package.json:52`
+**Description:** `oxlint` is installed but no script runs it. The `lint` script uses `eslint`.
+
+### 5.4 LOW — `autoprefixer`/`postcss` Redundant With Tailwind v4
+
+**File:** `package.json:45,53`
+**Description:** With `@tailwindcss/vite` plugin, autoprefixer is built in and PostCSS is not needed separately.
+
+### 5.5 LOW — Missing `test:coverage` Script
+
+**Description:** No script for running test coverage. Given low coverage, this is a gap.
+
+### 5.6 LOW — `db.ts` Database Name Inconsistency
+
+**File:** `src/db.ts:81 vs 125`
+**Description:** Line 81 uses `'finance.db'` but the error message at line 125 says `'vantor.db'`. Cosmetic but misleading during debugging.
+
+### 5.7 LOW — `types.ts` `linked_transaction_id` Type Inconsistency
+
+**File:** `src/db/types.ts:72`
+**Description:** `linked_transaction_id?: number | null` has `?` (optional) in addition to `null`. All other nullable FKs use just `number | null` without `?`. The DB always returns `null`, never `undefined`.
+
+### 5.8 LOW — `types.ts` Stale JSDoc for `opening_balance`
+
+**File:** `src/db/types.ts:29`
+**Description:** Comment says "For credit_card, it's the credit limit" but credit cards now have a separate `credit_limit` column.
+
+### 5.9 LOW — Settings Typed Setter Helpers Redundant
+
+**File:** `src/db/repos/SettingsRepo.ts:59-69`
+**Description:** `setStockApiKey()`, `setFxApiKey()`, `setBaseCurrency()` duplicate the generic `update()` method. `setTheme()` is missing despite being a valid column.
+
+### 5.10 LOW — `NetWorthSnapshotRepo.update()` Never Called
+
+**File:** `src/db/repos/NetWorthSnapshotRepo.ts:46-58`
+**Description:** `upsertByDate()` is the idempotent write path. The generic `update()` has no callers.
+
+### 5.11 LOW — No React Error Boundary
+
+**File:** `src/App.tsx:293-316`
+**Description:** No React error boundary wraps the routes. A render error in any page crashes the entire app with a white screen.
 
 ---
 
 ## Summary — Prioritized Fix List
 
-### High (fix before next feature work)
+### Critical (data corruption / broken features)
 
 | # | Finding | File | Fix Complexity |
 |---|---------|------|---------------|
-| 2.1 | Desktop sidebar navigation hidden | `App.tsx:171` | Medium — redesign nav |
+| 1.1 | AccountRepo `VALID_COLUMNS` missing columns — accrual duplicates | `AccountRepo.ts:42` | Low — expand set |
+| 1.2 | HoldingRepo `VALID_COLUMNS` has phantom columns | `HoldingRepo.ts:25` | Low — fix set |
+| 1.3 | `SCHEMA_VERSION = 5` — v6 indexes never created | `migrate.ts:5` | Low — change to 6 |
+| 1.4 | `computeNetWorth` cross-currency totals incomplete | `financeService.ts:840-860` | Medium — add dual conversion |
 
-### Medium (address in next sprint)
+### High (race conditions / wrong data / broken UX)
 
 | # | Finding | File | Fix Complexity |
 |---|---------|------|---------------|
-| ~~1.2~~ | ~~No type validation on addCashTransaction~~ | ~~`financeService.ts:48`~~ | ~~Low~~ ✓ |
-| ~~1.3~~ | ~~FX fallback silent~~ | ~~`financeService.ts:613-621`~~ | ~~Low~~ ✓ |
-| 1.4 | Credit card sign convention inconsistency | `financeService.ts` | Low — document |
-| ~~2.2~~ | ~~Touch targets below 44px~~ | ~~Multiple~~ | ~~Low~~ ✓ |
-| ~~2.5~~ | ~~AccountDetails useEffect/loadData duplication~~ | ~~`AccountDetails.tsx`~~ | ~~Low~~ ✓ |
-| ~~3.1~~ | ~~No future-dated transaction validation~~ | ~~`financeService.ts`~~ | ~~Low~~ ✓ |
-| ~~3.2~~ | ~~Unvalidated column names in SET~~ | ~~7 repos~~ | ~~Low~~ ✓ |
-| 4.1 | Raw SQL bypasses repo layer | `financeService.ts` | Medium |
-| 4.2 | Transaction boundaries not in repo | All services | Medium |
+| 1.5 | N+1 queries in `computeNetWorth` | `financeService.ts:820-828` | Medium — batch |
+| 1.6 | `sellSecurity` position check outside transaction | `financeService.ts:917-924` | Low — move inside |
+| 1.7 | `chargeCreditCard` limit check outside transaction | `financeService.ts:261-268` | Low — move inside |
+| 1.8 | `buySecurity` needs IMMEDIATE transaction | `financeService.ts:149` | Low — change BEGIN |
+| 2.1 | CashFlow "This Month" shows wrong month | `CashFlow.tsx:76` | Low — reset state |
+| 2.2 | Settings error messages in green | `Settings.tsx:66` | Low — change color |
+| 2.3 | Settings load failure → stuck spinner | `Settings.tsx:46` | Low — add error state |
+| 2.4 | AccountDetails non-numeric ID → blank page | `AccountDetails.tsx:44` | Low — add NaN check |
+| 2.5 | Home chart grid invisible in dark mode | `Home.tsx:392` | Low — theme stroke |
+| 4.1 | No `aria-current="page"` on nav links | `App.tsx` | Low — add attribute |
+| 4.2 | QuickTransaction modal missing ARIA/keyboard | `QuickTransaction.tsx:253` | Medium — add dialog attrs, focus trap, Escape |
+| 1.11 | `dbPendingPromise` never cleared on rejection | `db.ts:136` | Low — try/finally |
 
-### Low (tech debt / nice-to-have)
+### Medium (performance / UX gaps / code quality)
+
+| # | Finding | File | Fix Complexity |
+|---|---------|------|---------------|
+| 1.9 | UTC date computation mismatch | Multiple | Low — local date helper |
+| 1.10 | netWorthService 24h throttle suppresses snapshots | `netWorthService.ts:31` | Low — compare dates |
+| 1.12 | Rollback failure swallows original error | `financeService.ts` (6 places) | Low — try/catch around rollback |
+| 2.6 | Transactions filter changes no loading/race protection | `Transactions.tsx:83` | Medium |
+| 2.7 | AccountDetails sequential price fetching | `AccountDetails.tsx:138` | Low — Promise.allSettled |
+| 2.8 | Sankey fixed 800px width | `CashFlow.tsx:255` | Low — responsive |
+| 2.9 | Row-by-row imports without batching | `importExportService.ts:300` | Medium — batch insert |
+| 2.10 | Non-atomic migrations | `migrate.ts:207-227` | Low — wrap in tx |
+| 4.3 | Forms missing label/htmlFor | Multiple | Low — add id/htmlFor |
+| 5.1 | 5 eslint-disable comments | Various | Low |
+| 5.2 | Test coverage ~15% | `__tests__/` | High — Phase 12 |
+| 1.13 | Sankey node type drops color | `financeService.ts:607` | Low |
+| 1.14 | VALID_CASH_TYPES duplicated | `financeService.ts:48,663` | Low — share constant |
+
+### Low (tech debt / minor)
 
 | # | Finding | File |
 |---|---------|------|
-| ~~1.12~~ | ~~QuickTransaction shows opening_balance~~ | ~~`QuickTransaction.tsx:329`~~ ✓ |
-| ~~2.3~~ | ~~CashFlow abbreviated format inconsistency~~ | ~~`CashFlow.tsx:69-73`~~ ✓ |
-| ~~2.4~~ | ~~Transactions page lacks summary~~ | ~~`Transactions.tsx:156`~~ ✓ |
-| 3.3 | `DELETE FROM ${tableName}` interpolation | `importExportService.ts:257` |
-| 4.3 | Unused `linked_transaction_id` index | `migrate.ts:288` |
-| 4.4 | `eslint-disable` comments (5 total) | Various |
+| 1.14 | VALID_CASH_TYPES duplicated with Sankey | `financeService.ts:48,663` |
+| 2.11 | QuickTransaction redundant ternary | `QuickTransaction.tsx:131` |
+| 2.12 | CashFlow mountedRef unused | `CashFlow.tsx:94` |
+| 2.13 | Health animate-pulse never stops | `Health.tsx:64` |
+| 2.14 | Accounts resetForm clears error | `Accounts.tsx:119` |
+| 2.15 | Accounts openingBalance inconsistent init | `Accounts.tsx:57` |
+| 4.4 | Sort headers not keyboard accessible | `Transactions.tsx:306` |
+| 4.5 | Theme toggle missing aria-label | `App.tsx:63` |
+| 4.6 | Bottom tabs visible on desktop | `App.tsx:219` |
+| 5.3 | oxlint unused devDependency | `package.json:52` |
+| 5.4 | autoprefixer/postcss redundant | `package.json:45,53` |
+| 5.5 | No test:coverage script | `package.json` |
+| 5.6 | db.ts name inconsistency | `db.ts:81,125` |
+| 5.7 | types.ts nullable `?` inconsistency | `types.ts:72` |
+| 5.8 | types.ts stale JSDoc | `types.ts:29` |
+| 5.9 | Settings typed setters redundant | `SettingsRepo.ts:59` |
+| 5.10 | NetWorthSnapshotRepo.update() unused | `NetWorthSnapshotRepo.ts:46` |
+| 5.11 | No React error boundary | `App.tsx:293` |
+| 3.1 | SQL table name interpolation | `importExportService.ts:268` |
