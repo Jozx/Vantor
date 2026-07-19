@@ -1,4 +1,5 @@
 import { getRepos, getDb } from '@/db';
+import { todayISO } from '@/lib/utils';
 import Papa from 'papaparse';
 import { zipSync, unzipSync } from 'fflate';
 
@@ -353,6 +354,6 @@ export function triggerDownload(blob: Blob, filename: string): void {
  * Generate a backup filename with today's date.
  */
 export function backupFilename(): string {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayISO();
   return `vantor-backup-${today}.zip`;
 }

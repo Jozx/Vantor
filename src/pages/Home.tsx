@@ -6,6 +6,7 @@ import {
   getNetWorthHistory,
   type NetWorthHistoryPoint,
 } from '@/services/netWorthService';
+import { useTheme } from '@/components/ThemeProvider';
 import {
   exportToZip,
   parseImportZip,
@@ -51,6 +52,7 @@ interface AccountWithBalance extends Account {
 type ChartRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
 export default function Home() {
+  const { resolved } = useTheme();
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -128,6 +130,18 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [chartRange]);
 
+  // Refetch chart data when a new snapshot is created (fixes race on first load)
+  useEffect(() => {
+    const handleSnapshot = () => {
+      const monthsMap: Record<ChartRange, number> = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12, 'ALL': 60 };
+      getNetWorthHistory(monthsMap[chartRange]).then((history) => {
+        setChartData(history);
+      }).catch(console.error);
+    };
+    window.addEventListener('networth-snapshot-created', handleSnapshot);
+    return () => window.removeEventListener('networth-snapshot-created', handleSnapshot);
+  }, [chartRange]);
+
   const handleExport = async () => {
     setExporting(true);
     setExportError('');
@@ -183,27 +197,46 @@ export default function Home() {
 
   const typeConfig = accountTypeConfig;
 
-  const totalByType = (type: Account['type']) =>
-    accounts.filter((a) => a.type === type).reduce((sum, a) => sum + a.balance, 0);
+  // Use netWorth.breakdown for accurate values
+  // For broker: show only market value of holdings (exclude cash)
+  // For credit_card: show debt (absolute value)
+  // For others (bank, mutual_fund): show full balance
+  const totalByType = (type: Account['type']) => {
+    if (!netWorth) return accounts.filter((a) => a.type === type).reduce((sum, a) => sum + a.balance, 0);
+    return accounts
+      .filter((a) => a.type === type)
+      .reduce((sum, a) => {
+        const bal = netWorth.breakdown[a.id]?.balance ?? a.balance;
+        if (type === 'broker') {
+          return sum + Math.max(0, bal - a.balance);
+        }
+        return sum + bal;
+      }, 0);
+  };
 
   const currencyTotalsByType = (type: Account['type']): Record<Currency, number> => {
     const totals: Record<Currency, number> = { PYG: 0, USD: 0 };
     for (const a of accounts.filter((a) => a.type === type)) {
-      totals[a.currency] += a.balance;
+      const bal = netWorth?.breakdown[a.id]?.balance ?? a.balance;
+      if (type === 'broker') {
+        totals[a.currency] += Math.max(0, bal - a.balance);
+      } else {
+        totals[a.currency] += bal;
+      }
     }
     return totals;
   };
+
+  const totalCreditLimitByType = (type: Account['type']) =>
+    accounts.filter((a) => a.type === type).reduce((sum, a) => sum + (a.credit_limit ?? 0), 0);
+
+  const totalCashByType = (type: Account['type']) =>
+    accounts.filter((a) => a.type === type).reduce((sum, a) => sum + a.balance, 0);
 
   const hasMixedCurrenciesByType = (type: Account['type']) => {
     const currencies = new Set(accounts.filter((a) => a.type === type).map((a) => a.currency));
     return currencies.size > 1;
   };
-
-  const totalByCurrency = (curr: Currency) =>
-    accounts.filter((a) => a.currency === curr).reduce((sum, a) => sum + a.balance, 0);
-
-  const pygTotal = netWorth?.totalPyg ?? totalByCurrency('PYG');
-  const usdTotal = netWorth?.totalUsd ?? totalByCurrency('USD');
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-24 sm:pb-6">
@@ -238,34 +271,6 @@ export default function Home() {
             Retry
           </button>
         </div>
-      )}
-
-      {/* Net Worth Summary */}
-      {!loading && !loadError && (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 shadow-xs">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-emerald-500/10 rounded-lg">
-              <Wallet className="h-5 w-5 text-emerald-500" />
-            </div>
-            <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Total PYG</span>
-          </div>
-          <p className="text-2xl font-extrabold text-zinc-900 dark:text-zinc-50">
-            {formatMoney(pygTotal, 'PYG')}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 shadow-xs">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-500/10 rounded-lg">
-              <Wallet className="h-5 w-5 text-blue-500" />
-            </div>
-            <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Total USD</span>
-          </div>
-          <p className="text-2xl font-extrabold text-zinc-900 dark:text-zinc-50">
-            {formatMoney(usdTotal, 'USD')}
-          </p>
-        </div>
-      </div>
       )}
 
       {/* Assets / Liabilities Breakdown */}
@@ -389,7 +394,7 @@ export default function Home() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" />
+                <CartesianGrid strokeDasharray="3 3" stroke={resolved === 'dark' ? '#3f3f46' : '#e4e4e7'} />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11 }}
@@ -465,16 +470,38 @@ export default function Home() {
                       {Object.entries(currencyTotalsByType(type))
                         .filter(([, v]) => v !== 0)
                         .map(([cur, t]) => (
-                          <span key={cur} className="leading-tight">{formatMoney(t, cur as Currency)}</span>
+                          <span key={cur} className="leading-tight">
+                            {type === 'credit_card' ? formatMoney(Math.abs(t), cur as Currency) : formatMoney(t, cur as Currency)}
+                          </span>
                         ))
                       }
                     </div>
                   ) : (
-                    formatMoney(total, accounts.find((a) => a.type === type)?.currency ?? 'PYG')
+                    type === 'credit_card'
+                      ? formatMoney(Math.abs(total), accounts.find((a) => a.type === type)?.currency ?? 'PYG')
+                      : formatMoney(total, accounts.find((a) => a.type === type)?.currency ?? 'PYG')
                   )
                   : '—'
                 }
               </div>
+              {type === 'credit_card' && count > 0 && (() => {
+                const creditLimit = totalCreditLimitByType('credit_card');
+                if (creditLimit <= 0) return null;
+                return (
+                  <div className="mt-1 text-xs text-zinc-400">
+                    owed · {formatMoney(creditLimit, accounts.find((a) => a.type === 'credit_card')?.currency ?? 'PYG')} limit
+                  </div>
+                );
+              })()}
+              {type === 'broker' && count > 0 && (() => {
+                const cash = totalCashByType(type);
+                if (cash === 0) return null;
+                return (
+                  <div className="mt-1 text-xs text-zinc-400">
+                    + {formatMoney(cash, accounts.find((a) => a.type === type)?.currency ?? 'PYG')} cash
+                  </div>
+                );
+              })()}
             </Link>
           );
         })}

@@ -19,9 +19,12 @@ import {
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMsg, setRefreshMsg] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [refreshError, setRefreshError] = useState(false);
   const [marketStatus, setMarketStatus] = useState<{
     lastRefresh: Date | null;
     fxRatesCount: number;
@@ -45,6 +48,7 @@ export default function SettingsPage() {
         setMarketStatus(status);
       } catch (err) {
         console.error('Failed to load settings:', err);
+        if (!cancelled) setLoadError('Failed to load settings. Please try again.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -54,17 +58,18 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveMsg('');
+    setSaveSuccess(false);
+    setSaveError('');
     try {
       await updateSettings({
         stock_api_key: stockKey,
         fx_api_key: fxKey,
         base_currency: baseCurrency,
       });
-      setSaveMsg('Settings saved');
-      setTimeout(() => setSaveMsg(''), 3000);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      setSaveMsg(err instanceof Error ? err.message : 'Failed to save');
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -73,10 +78,12 @@ export default function SettingsPage() {
   const handleRefresh = async () => {
     setRefreshing(true);
     setRefreshMsg('');
+    setRefreshError(false);
     try {
       const result = await refreshMarketData(baseCurrency);
       if (result.error) {
         setRefreshMsg(`Refresh failed: ${result.error}`);
+        setRefreshError(true);
       } else {
         setMarketStatus({
           lastRefresh: result.lastRefresh,
@@ -98,6 +105,20 @@ export default function SettingsPage() {
       <div className="text-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-zinc-400 mx-auto mb-3" />
         <p className="text-zinc-500 dark:text-zinc-400 font-medium">Loading settings...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-8 animate-in fade-in duration-300 max-w-2xl">
+        <div className="p-6 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center gap-3">
+          <AlertCircle className="h-6 w-6 shrink-0" />
+          <div>
+            <span className="font-semibold">{loadError}</span>
+            <button onClick={() => window.location.reload()} className="block mt-2 text-xs underline cursor-pointer">Retry</button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -209,8 +230,11 @@ export default function SettingsPage() {
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               {saving ? 'Saving...' : 'Save Settings'}
             </button>
-            {saveMsg && (
-              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{saveMsg}</span>
+            {saveSuccess && (
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Settings saved</span>
+            )}
+            {saveError && (
+              <span className="text-xs font-medium text-rose-600 dark:text-rose-400">{saveError}</span>
             )}
           </div>
         </div>
@@ -265,7 +289,7 @@ export default function SettingsPage() {
           {refreshMsg && (
             <span className={cn(
               'text-xs font-medium',
-              refreshMsg.includes('failed')
+              refreshError
                 ? 'text-rose-600 dark:text-rose-400'
                 : 'text-emerald-600 dark:text-emerald-400'
             )}>

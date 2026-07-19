@@ -7,6 +7,7 @@ import AccountDetails from '@/pages/AccountDetails';
 import Transactions from '@/pages/Transactions';
 import CashFlow from '@/pages/CashFlow';
 import SettingsPage from '@/pages/Settings';
+import Reports from '@/pages/Reports';
 import { ThemeProvider, useTheme } from '@/components/ThemeProvider';
 import {
   Wallet,
@@ -23,6 +24,7 @@ import {
   Menu,
   X,
   Settings,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { runAccrualEngine } from '@/services/financeService';
@@ -40,6 +42,7 @@ const bottomTabs = [
 const sidebarItems = [
   { name: 'Transactions', path: '/transactions', icon: ArrowLeftRight },
   { name: 'Cash Flow', path: '/cash-flow', icon: ArrowRightLeft },
+  { name: 'Reports', path: '/reports', icon: FileText },
   { name: 'Settings', path: '/settings', icon: Settings },
   { name: 'DB Health', path: '/health', icon: Database },
 ];
@@ -307,6 +310,7 @@ export default function App() {
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/cash-flow" element={<CashFlow />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/health" element={<Health />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

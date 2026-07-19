@@ -133,9 +133,12 @@ export async function getDb(): Promise<SQLiteDBConnection> {
   return dbInstance;
   })();
 
-  const result = await dbPendingPromise;
-  dbPendingPromise = null;
-  return result;
+  try {
+    const result = await dbPendingPromise;
+    return result;
+  } finally {
+    dbPendingPromise = null;
+  }
 }
 
 /**
@@ -156,7 +159,10 @@ export async function getRepos() {
     reposInstance = createRepos(db);
     return reposInstance;
   })();
-  const result = await reposPendingPromise;
-  reposPendingPromise = null;
-  return result;
+  try {
+    const result = await reposPendingPromise;
+    return result;
+  } finally {
+    reposPendingPromise = null;
+  }
 }

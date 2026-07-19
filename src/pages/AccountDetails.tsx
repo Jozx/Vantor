@@ -23,7 +23,7 @@ import type { HoldingWithStats } from '@/services/financeService';
 import type { Account, CashTransaction, SecurityTransaction, CashTransactionType, Tag } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
 import AmountInput from '@/components/AmountInput';
-import { cn, formatMoney, displayTag } from '@/lib/utils';
+import { cn, formatMoney, displayTag, todayISO } from '@/lib/utils';
 import {
   ArrowLeft,
   CircleDollarSign,
@@ -66,7 +66,7 @@ export default function AccountDetails() {
   const [quantity, setQuantity] = useState<number>(0);
   const [price, setPrice] = useState<number>(0);
   const [commission, setCommission] = useState<number>(0);
-  const [tradeDate, setTradeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [tradeDate, setTradeDate] = useState(todayISO());
   const [tradeDesc, setTradeDesc] = useState('');
   const [tradeMarket, setTradeMarket] = useState('US');
 
@@ -74,21 +74,21 @@ export default function AccountDetails() {
   const [cashType, setCashType] = useState<CashTransactionType>('income');
   const [cashAmount, setCashAmount] = useState<number>(0);
   const [cashDesc, setCashDesc] = useState('');
-  const [cashDate, setCashDate] = useState(new Date().toISOString().split('T')[0]);
+  const [cashDate, setCashDate] = useState(todayISO());
   const [cashTagId, setCashTagId] = useState<number | null>(null);
   const [customTagName, setCustomTagName] = useState('');
 
   // Credit Card Charge Form State
   const [chargeAmount, setChargeAmount] = useState<number>(0);
   const [chargeDesc, setChargeDesc] = useState('');
-  const [chargeDate, setChargeDate] = useState(new Date().toISOString().split('T')[0]);
+  const [chargeDate, setChargeDate] = useState(todayISO());
   const [chargeTagId, setChargeTagId] = useState<number | null>(null);
   const [chargeCustomTag, setChargeCustomTag] = useState('');
 
   // Credit Card Payment Form State
   const [payFromAccountId, setPayFromAccountId] = useState<number | null>(null);
   const [payAmount, setPayAmount] = useState<number>(0);
-  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
+  const [payDate, setPayDate] = useState(todayISO());
   const [bankAccounts, setBankAccounts] = useState<Account[]>([]);
 
   // Tags list
@@ -142,20 +142,20 @@ export default function AccountDetails() {
             prices.set(holding.symbol, price);
           }
         }
-        if (!signal?.aborted) setMarketPrices(prices);
-      } else if (acc.type === 'credit_card') {
-        const allAccounts = await getAccounts();
         if (signal?.aborted) return;
-        setBankAccounts(allAccounts.filter((a) => a.type === 'bank'));
-        setActiveTab('cash');
-      } else {
-        setActiveTab('cash');
+        setMarketPrices(prices);
       }
 
-      const allTags = await getTags();
+      if (acc.type === 'credit_card') {
+        const bankAccs = await getAccounts();
+        if (signal?.aborted) return;
+        setBankAccounts(bankAccs.filter((a) => a.type === 'bank'));
+      }
+
+      const t = await getTags();
       if (signal?.aborted) return;
-      setTags(allTags);
-    } catch (err: unknown) {
+      setTags(t);
+    } catch (err) {
       console.error(err);
       if (!signal?.aborted) setError('Failed to load account information');
     } finally {
@@ -170,6 +170,17 @@ export default function AccountDetails() {
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
+
+  if (!accountId || isNaN(accountId)) {
+    return (
+      <div className="space-y-6">
+        <div className="p-6 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center gap-3">
+          <AlertCircle className="h-6 w-6 shrink-0" />
+          <span className="font-semibold">Invalid account ID.</span>
+        </div>
+      </div>
+    );
+  }
 
   // Handle Buy/Sell submission (Broker)
   const handleSecurityTrade = async (e: React.FormEvent) => {
@@ -687,7 +698,7 @@ export default function AccountDetails() {
                         onChange={(e) => setChargeDate(e.target.value)}
                         className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                       />
-                      {chargeDate && chargeDate > new Date().toISOString().split('T')[0] && (
+                      {chargeDate && chargeDate > todayISO() && (
                         <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">This date is in the future.</p>
                       )}
                     </div>
@@ -804,7 +815,7 @@ export default function AccountDetails() {
                         onChange={(e) => setPayDate(e.target.value)}
                         className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                       />
-                      {payDate && payDate > new Date().toISOString().split('T')[0] && (
+                      {payDate && payDate > todayISO() && (
                         <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">This date is in the future.</p>
                       )}
                     </div>
@@ -891,7 +902,7 @@ export default function AccountDetails() {
                       onChange={(e) => setCashDate(e.target.value)}
                       className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     />
-                    {cashDate && cashDate > new Date().toISOString().split('T')[0] && (
+                    {cashDate && cashDate > todayISO() && (
                       <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">This date is in the future.</p>
                     )}
                   </div>

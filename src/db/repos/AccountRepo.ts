@@ -39,7 +39,7 @@ export class AccountRepo {
    * Column names come from the typed key set of `Account` – values are
    * always parameterised.
    */
-  private static VALID_COLUMNS = new Set(['name', 'type', 'currency', 'opening_balance']);
+  private static VALID_COLUMNS = new Set(['name', 'type', 'currency', 'institution', 'opening_balance', 'opening_date', 'yield_rate', 'last_accrual_date', 'credit_limit']);
 
   async update(id: number, data: Partial<Omit<Account, 'id'>>, transaction = true): Promise<void> {
     const entries = Object.entries(data).filter(([col, v]) => v !== undefined && AccountRepo.VALID_COLUMNS.has(col));

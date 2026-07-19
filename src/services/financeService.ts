@@ -8,7 +8,7 @@ import type {
   Tag,
   Settings,
 } from '@/db';
-import { displayTag } from '@/lib/utils';
+import { displayTag, todayISO } from '@/lib/utils';
 
 export interface HoldingWithStats extends Holding {
   quantity: number;
@@ -141,8 +141,8 @@ export async function buySecurity(
 
   const totalCost = quantity * price + commission;
 
-  // 1. Execute in a transaction
-  await db.beginTransaction();
+  // 1. Execute in IMMEDIATE transaction (prevents duplicate holding creation)
+  await db.execute('BEGIN IMMEDIATE TRANSACTION');
   try {
     // Find or create holding (inside transaction to prevent duplicates)
     const cleanSymbol = symbol.trim().toUpperCase();
@@ -258,15 +258,16 @@ export async function chargeCreditCard(
     throw new Error('This credit card has no credit limit set');
   }
 
-  const currentDebt = await getCardDebtBalance(cardAccountId);
-  if (currentDebt + amount > account.credit_limit) {
-    throw new Error(
-      `Charge would exceed credit limit. Available: ${(account.credit_limit - currentDebt).toLocaleString()}`,
-    );
-  }
-
-  await db.beginTransaction();
+  await db.execute('BEGIN IMMEDIATE TRANSACTION');
   try {
+    // Re-check debt inside transaction (prevents race condition)
+    const latestDebt = await getCardDebtBalance(cardAccountId);
+    if (latestDebt + amount > account.credit_limit) {
+      throw new Error(
+        `Charge would exceed credit limit. Available: ${(account.credit_limit - latestDebt).toLocaleString()}`,
+      );
+    }
+
     const txId = await repos.cashLedger.create({
       account_id: cardAccountId,
       type: 'charge',
@@ -464,7 +465,7 @@ export async function runAccrualEngine(): Promise<void> {
   const db = await getDb();
 
   const mutualFunds = await repos.accounts.findByType('mutual_fund');
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const today = todayISO(); // YYYY-MM-DD
 
   for (const fund of mutualFunds) {
     if (fund.yield_rate == null || fund.yield_rate <= 0) continue;
@@ -784,9 +785,6 @@ export interface NetWorthResult {
  */
 export async function computeNetWorth(): Promise<NetWorthResult> {
   const repos = await getRepos();
-  const settings = await repos.settings.get();
-  const baseCurrency = settings.base_currency;
-
   const accounts = await repos.accounts.findAll();
   const breakdown: NetWorthResult['breakdown'] = {};
   let totalPyg = 0;
@@ -796,68 +794,78 @@ export async function computeNetWorth(): Promise<NetWorthResult> {
   let assetsUsd = 0;
   let liabilitiesUsd = 0;
 
-  // Get FX rate to convert everything to base currency
-  const getConversion = async (from: string, to: string): Promise<number> => {
-    if (from === to) return 1;
-    const rate = await repos.marketData.latestFxRate(from, to);
-    return rate?.rate ?? 1;
-  };
+  // Batch-fetch FX rates — always use explicit direction names regardless of base_currency
+  const [ratePygToUsd, rateUsdToPyg] = await Promise.all([
+    repos.marketData.latestFxRate('PYG', 'USD'),
+    repos.marketData.latestFxRate('USD', 'PYG'),
+  ]);
+  const pygToUsd = ratePygToUsd?.rate ?? 1;
+  const usdToPyg = rateUsdToPyg?.rate ?? 1;
+
+  // Batch-fetch cash balances
+  const accountIds = accounts.map((a) => a.id);
+  const cashBalances = await repos.cashLedger.runningBalanceBatch(accountIds);
+
+  // Batch-fetch all holdings for broker accounts
+  const brokerAccounts = accounts.filter((a) => a.type === 'broker');
+  const allHoldings = await Promise.all(
+    brokerAccounts.map((a) => repos.holdings.findByAccountId(a.id)),
+  );
+  const holdingsByAccount = new Map(brokerAccounts.map((a, i) => [a.id, allHoldings[i]]));
+
+  // Batch-fetch positions for all holdings
+  const allHoldingIds = allHoldings.flat().map((h) => h.id);
+  const positions = allHoldingIds.length > 0
+    ? await repos.securityLedger.netPositionsBatch(allHoldingIds)
+    : new Map();
+
+  // Batch-fetch all security prices
+  const allPrices = await repos.marketData.latestPricesAll();
+  const priceBySymbol = new Map(allPrices.map((p) => [p.symbol, p.price]));
 
   for (const account of accounts) {
     let balance: number;
     const currency = account.currency;
 
     if (account.type === 'credit_card') {
-      // Credit card debt is negative net worth
       const debt = await getCardDebtBalance(account.id);
       balance = -debt;
     } else if (account.type === 'broker') {
-      // Broker: cash balance + market value of holdings
-      const cashBalance = await repos.cashLedger.runningBalance(account.id);
-      const holdings = await repos.holdings.findByAccountId(account.id);
+      const cashBalance = cashBalances.get(account.id) ?? 0;
+      const holdings = holdingsByAccount.get(account.id) ?? [];
       let marketValue = 0;
 
       for (const holding of holdings) {
-        const pos = await repos.securityLedger.netPosition(holding.id);
+        const pos = positions.get(holding.id);
         const quantity = pos?.net_quantity ?? 0;
         if (quantity <= 0) continue;
-
-        const priceData = await repos.marketData.latestSecurityPrice(holding.symbol);
-        const price = priceData?.price ?? 0;
+        const price = priceBySymbol.get(holding.symbol) ?? 0;
         marketValue += quantity * price;
       }
 
       balance = cashBalance + marketValue;
     } else {
-      // Bank or mutual_fund: just cash balance
-      balance = await repos.cashLedger.runningBalance(account.id);
+      balance = cashBalances.get(account.id) ?? 0;
     }
 
-    // Convert to base currency
-    const conversion = await getConversion(currency, baseCurrency);
-    const convertedBalance = balance * conversion;
+    // Always compute both PYG and USD values
+    let pygValue: number;
+    let usdValue: number;
 
-    // Add to totals
     if (currency === 'PYG') {
-      totalPyg += balance;
-      if (balance >= 0) assetsPyg += balance;
-      else liabilitiesPyg += Math.abs(balance);
+      pygValue = balance;
+      usdValue = balance * pygToUsd;
     } else {
-      totalUsd += balance;
-      if (balance >= 0) assetsUsd += balance;
-      else liabilitiesUsd += Math.abs(balance);
+      usdValue = balance;
+      pygValue = balance * usdToPyg;
     }
 
-    // If converting USD to PYG or vice versa, adjust totals
-    if (baseCurrency === 'PYG' && currency === 'USD') {
-      totalPyg += convertedBalance;
-      if (convertedBalance >= 0) assetsPyg += convertedBalance;
-      else liabilitiesPyg += Math.abs(convertedBalance);
-    } else if (baseCurrency === 'USD' && currency === 'PYG') {
-      totalUsd += convertedBalance;
-      if (convertedBalance >= 0) assetsUsd += convertedBalance;
-      else liabilitiesUsd += Math.abs(convertedBalance);
-    }
+    totalPyg += pygValue;
+    totalUsd += usdValue;
+    if (pygValue >= 0) assetsPyg += pygValue;
+    else liabilitiesPyg += Math.abs(pygValue);
+    if (usdValue >= 0) assetsUsd += usdValue;
+    else liabilitiesUsd += Math.abs(usdValue);
 
     breakdown[account.id] = {
       name: account.name,
@@ -913,16 +921,16 @@ export async function sellSecurity(
     throw new Error(`You do not hold any shares of ${cleanSymbol}`);
   }
 
-  // 2. Check position integrity
-  const pos = await repos.securityLedger.netPosition(holding.id);
-  const currentQuantity = pos?.net_quantity ?? 0;
-  if (quantity > currentQuantity) {
-    throw new Error(`Insufficient shares of ${cleanSymbol} to sell`);
-  }
-
-  // 3. Execute in a transaction
-  await db.beginTransaction();
+  // 2. Execute in IMMEDIATE transaction (prevents overselling via race condition)
+  await db.execute('BEGIN IMMEDIATE TRANSACTION');
   try {
+    // 3. Check position integrity inside transaction
+    const pos = await repos.securityLedger.netPosition(holding.id);
+    const currentQuantity = pos?.net_quantity ?? 0;
+    if (quantity > currentQuantity) {
+      throw new Error(`Insufficient shares of ${cleanSymbol} to sell`);
+    }
+
     // 4. Create security transaction
     const tradeId = await repos.securityLedger.create({
       holding_id: holding.id,

@@ -22,7 +22,7 @@ export class HoldingRepo {
   }
 
   /** Partially update a holding row. */
-  private static VALID_COLUMNS = new Set(['account_id', 'symbol', 'quantity', 'average_cost']);
+  private static VALID_COLUMNS = new Set(['account_id', 'symbol', 'currency', 'market']);
 
   async update(id: number, data: Partial<Omit<Holding, 'id'>>, transaction = true): Promise<void> {
     const entries = Object.entries(data).filter(([col, v]) => v !== undefined && HoldingRepo.VALID_COLUMNS.has(col));

@@ -6,10 +6,13 @@ import {
   updateAccount,
   deleteAccount,
   getCashBalanceBatch,
+  getHoldingsWithStats,
 } from '@/services/financeService';
+import type { HoldingWithStats } from '@/services/financeService';
 import type { Account, AccountType, Currency } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
-import { cn, formatMoney, accountTypeConfig } from '@/lib/utils';
+import { cn, formatMoney, accountTypeConfig, todayISO } from '@/lib/utils';
+import AmountInput from '@/components/AmountInput';
 import {
   Plus,
   Trash2,
@@ -47,6 +50,9 @@ export default function Accounts({ filterType }: AccountsProps) {
     new Set(visibleTypes)
   );
 
+  // Holdings state for broker accounts
+  const [holdingsMap, setHoldingsMap] = useState<Map<number, HoldingWithStats[]>>(new Map());
+
   // Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -54,10 +60,10 @@ export default function Accounts({ filterType }: AccountsProps) {
   const [type, setType] = useState<AccountType>('bank');
   const [currency, setCurrency] = useState<Currency>('USD');
   const [institution, setInstitution] = useState('');
-  const [openingBalance, setOpeningBalance] = useState('');
-  const [openingDate, setOpeningDate] = useState(new Date().toISOString().split('T')[0]);
-  const [yieldRate, setYieldRate] = useState('');
-  const [creditLimit, setCreditLimit] = useState('');
+  const [openingBalance, setOpeningBalance] = useState<number>(0);
+  const [openingDate, setOpeningDate] = useState(todayISO());
+  const [yieldRate, setYieldRate] = useState<number>(0);
+  const [creditLimit, setCreditLimit] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchAccounts = async () => {
@@ -87,6 +93,22 @@ export default function Accounts({ filterType }: AccountsProps) {
         const data = await fetchAccounts();
         if (cancelled) return;
         setAccounts(data);
+
+        // Fetch holdings for broker accounts
+        const brokerAccs = data.filter((a) => a.type === 'broker');
+        if (brokerAccs.length > 0) {
+          const hMap = new Map<number, HoldingWithStats[]>();
+          await Promise.all(
+            brokerAccs.map(async (a) => {
+              const holdings = await getHoldingsWithStats(a.id);
+              const active = holdings.filter((h) => h.quantity > 0);
+              hMap.set(a.id, active);
+            })
+          );
+          if (!cancelled) {
+            setHoldingsMap(hMap);
+          }
+        }
       } catch (err: unknown) {
         console.error(err);
         if (!cancelled) setError('Failed to fetch accounts');
@@ -112,10 +134,10 @@ export default function Accounts({ filterType }: AccountsProps) {
     setType('bank');
     setCurrency('USD');
     setInstitution('');
-    setOpeningBalance('0');
-    setOpeningDate(new Date().toISOString().split('T')[0]);
-    setYieldRate('');
-    setCreditLimit('');
+    setOpeningBalance(0);
+    setOpeningDate(todayISO());
+    setYieldRate(0);
+    setCreditLimit(0);
     setError('');
   };
 
@@ -134,10 +156,10 @@ export default function Accounts({ filterType }: AccountsProps) {
     setType(acc.type);
     setCurrency(acc.currency);
     setInstitution(acc.institution);
-    setOpeningBalance(acc.opening_balance.toString());
+    setOpeningBalance(acc.opening_balance);
     setOpeningDate(acc.opening_date);
-    setYieldRate(acc.yield_rate !== null ? acc.yield_rate.toString() : '');
-    setCreditLimit(acc.credit_limit !== null ? acc.credit_limit.toString() : '');
+    setYieldRate(acc.yield_rate ?? 0);
+    setCreditLimit(acc.credit_limit ?? 0);
     setError('');
     setIsModalOpen(true);
   };
@@ -155,23 +177,9 @@ export default function Accounts({ filterType }: AccountsProps) {
       return;
     }
 
-    const parsedBalance = parseFloat(openingBalance);
-    if (isNaN(parsedBalance)) {
-      setError('Opening balance must be a valid number');
-      return;
-    }
-
     let parsedYield: number | null = null;
     if (type === 'mutual_fund') {
-      if (yieldRate.trim()) {
-        parsedYield = parseFloat(yieldRate);
-        if (isNaN(parsedYield)) {
-          setError('Yield rate must be a valid number');
-          return;
-        }
-      } else {
-        parsedYield = 0;
-      }
+      parsedYield = yieldRate || 0;
     }
 
     setIsSubmitting(true);
@@ -181,11 +189,11 @@ export default function Accounts({ filterType }: AccountsProps) {
         type,
         currency,
         institution: institution.trim(),
-        opening_balance: parsedBalance,
+        opening_balance: openingBalance,
         opening_date: openingDate,
         yield_rate: parsedYield,
         last_accrual_date: type === 'mutual_fund' ? openingDate : null,
-        credit_limit: type === 'credit_card' ? (parseFloat(creditLimit) || null) : null,
+        credit_limit: type === 'credit_card' ? (creditLimit || null) : null,
       };
 
       if (editId !== null) {
@@ -392,6 +400,22 @@ export default function Accounts({ filterType }: AccountsProps) {
                                   <span className="ml-2 text-emerald-500 font-semibold">{acc.yield_rate}% yield</span>
                                 )}
                               </div>
+
+                              {acc.type === 'broker' && holdingsMap.has(acc.id) && (() => {
+                                const holdings = holdingsMap.get(acc.id)!;
+                                if (holdings.length === 0) return null;
+                                return (
+                                  <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                                    <Link
+                                      to={`/accounts/${acc.id}`}
+                                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                      Show Portfolio ({holdings.length} position{holdings.length !== 1 ? 's' : ''})
+                                    </Link>
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             <div className="bg-white/50 dark:bg-zinc-900/20 border-t border-zinc-100 dark:border-zinc-900 px-5 py-3 flex items-center justify-between gap-3 shrink-0">
@@ -521,13 +545,12 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                     {type === 'credit_card' ? 'Opening Debt' : type === 'broker' ? 'Opening Cash' : 'Opening Balance'}
                   </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
+                  <AmountInput
                     value={openingBalance}
-                    onChange={(e) => setOpeningBalance(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
+                    onChange={setOpeningBalance}
+                    currency={currency}
+                    required
+                    placeholder="0"
                   />
                 </div>
                 <div>
@@ -549,13 +572,11 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                     Annual Yield Rate (%)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="e.g. 5.25"
+                  <AmountInput
                     value={yieldRate}
-                    onChange={(e) => setYieldRate(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
+                    onChange={setYieldRate}
+                    currency="USD"
+                    placeholder="e.g. 5.25"
                   />
                 </div>
               )}
@@ -565,13 +586,11 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                     Credit Limit
                   </label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 10000000"
+                  <AmountInput
                     value={creditLimit}
-                    onChange={(e) => setCreditLimit(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
+                    onChange={setCreditLimit}
+                    currency={currency}
+                    placeholder="e.g. 10000000"
                   />
                 </div>
               )}

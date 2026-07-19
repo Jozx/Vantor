@@ -84,10 +84,11 @@ export default function CashFlow() {
   const currentYear = new Date().getFullYear();
 
   const period: CashFlowPeriod = useMemo(
-    () =>
-      periodMode === 'thisYear'
-        ? { mode: 'year', year: selectedYear }
-        : { mode: 'month', month: selectedMonth, year: selectedYear },
+    () => {
+      if (periodMode === 'thisYear') return { mode: 'year', year: selectedYear };
+      if (periodMode === 'thisMonth') return { mode: 'month', month: new Date().getMonth(), year: selectedYear };
+      return { mode: 'month', month: selectedMonth, year: selectedYear };
+    },
     [periodMode, selectedMonth, selectedYear],
   );
 

@@ -7,6 +7,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Return today's date as a local YYYY-MM-DD string (not UTC). */
+export function todayISO(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/** Convert any Date to a local YYYY-MM-DD string (not UTC). */
+export function toLocalISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function formatMoney(amount: number, curr: Currency | string): string {
   return curr === 'PYG'
     ? new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG' }).format(amount)

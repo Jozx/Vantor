@@ -10,7 +10,7 @@ import {
   createTag,
 } from '@/services/financeService';
 import type { Account, Tag } from '@/db';
-import { cn } from '@/lib/utils';
+import { cn, todayISO } from '@/lib/utils';
 import AmountInput from '@/components/AmountInput';
 import { X, Plus, AlertCircle, Zap, ArrowRight, CreditCard, Banknote, ArrowLeftRight, CircleDollarSign } from 'lucide-react';
 
@@ -42,7 +42,7 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
   const [toAccountId, setToAccountId] = useState<number | null>(null);
   const [amount, setAmount] = useState<number>(0);
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(todayISO());
   const [tagId, setTagId] = useState<number | null>(null);
   const [customTagName, setCustomTagName] = useState('');
   const [error, setError] = useState('');
@@ -86,7 +86,7 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
     setTagId(null);
     setCustomTagName('');
     setError('');
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(todayISO());
   };
 
   const handleClose = () => {

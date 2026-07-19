@@ -1,4 +1,5 @@
 import { getRepos } from '@/db';
+import { todayISO, toLocalISO } from '@/lib/utils';
 import { computeNetWorth } from './financeService';
 
 // ─── Throttle Control ────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ export async function refreshNetWorthSnapshot(): Promise<{
   snapshotDate: string | null;
   error: string | null;
 }> {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const today = todayISO(); // YYYY-MM-DD
 
   // Check if we already have a snapshot for today
   const repos = await getRepos();
@@ -49,6 +50,9 @@ export async function refreshNetWorthSnapshot(): Promise<{
     });
 
     lastSnapshotDate = today;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('networth-snapshot-created'));
+    }
     return { success: true, snapshotDate: today, error: null };
   } catch (error) {
     console.error('Net worth snapshot failed:', error);
@@ -82,8 +86,8 @@ export async function getNetWorthHistory(
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
 
-  const from = startDate.toISOString().split('T')[0];
-  const to = endDate.toISOString().split('T')[0];
+  const from = toLocalISO(startDate);
+  const to = toLocalISO(endDate);
 
   const snapshots = await repos.netWorthSnapshots.findAll({ from, to });
 

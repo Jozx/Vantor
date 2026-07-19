@@ -36,16 +36,23 @@ function buildMockRepos(overrides: {
     },
     cashLedger: {
       runningBalance: vi.fn().mockImplementation((id: number) => Promise.resolve(cashBalances[id] ?? 0)),
+      runningBalanceBatch: vi.fn().mockImplementation((ids: number[]) => {
+        const result = new Map<number, number>();
+        for (const id of ids) result.set(id, cashBalances[id] ?? 0);
+        return Promise.resolve(result);
+      }),
     },
     holdings: {
       findByAccountId: vi.fn().mockResolvedValue([]),
     },
     securityLedger: {
       netPosition: vi.fn().mockResolvedValue(null),
+      netPositionsBatch: vi.fn().mockResolvedValue(new Map()),
     },
     marketData: {
       latestFxRate: vi.fn().mockResolvedValue(null),
       latestSecurityPrice: vi.fn().mockResolvedValue(null),
+      latestPricesAll: vi.fn().mockResolvedValue([]),
     },
     netWorthSnapshots: {
       findByDate: vi.fn().mockResolvedValue(null),
@@ -197,6 +204,45 @@ describe('computeNetWorth', () => {
     expect(result.totalPyg).toBe(3000000 - 500000 - 800000);
     expect(result.liabilitiesPyg).toBe(1300000);
     expect(result.assetsPyg).toBe(3000000);
+  });
+
+  it('dual-currency totals are correct regardless of base_currency setting', async () => {
+    const accounts = [
+      { id: 1, name: 'Bank PYG', type: 'bank', currency: 'PYG', institution: 'Banco', opening_balance: 1000000, opening_date: '2024-01-01', yield_rate: null, last_accrual_date: null, credit_limit: null },
+      { id: 2, name: 'Bank USD', type: 'bank', currency: 'USD', institution: 'Banco', opening_balance: 200, opening_date: '2024-01-01', yield_rate: null, last_accrual_date: null, credit_limit: null },
+    ];
+
+    // Mock with base_currency = 'USD' (the previously broken case)
+    const settingsUsd = { id: 1, stock_api_key: '', fx_api_key: '', base_currency: 'USD', theme: 'system' as const };
+    const repos = buildMockRepos({
+      accounts,
+      cashBalances: { 1: 1000000, 2: 200 },
+    });
+    repos.settings.get = vi.fn().mockResolvedValue(settingsUsd);
+
+    // Mock FX rates: PYG→USD = 0.000143, USD→PYG = 7000
+    repos.marketData.latestFxRate = vi.fn().mockImplementation((from: string, to: string) => {
+      if (from === 'PYG' && to === 'USD') return Promise.resolve({ rate: 0.000143 });
+      if (from === 'USD' && to === 'PYG') return Promise.resolve({ rate: 7000 });
+      return Promise.resolve(null);
+    });
+
+    (getRepos as ReturnType<typeof vi.fn>).mockResolvedValue(repos);
+
+    const { getDb } = await import('@/db');
+    (getDb as ReturnType<typeof vi.fn>).mockResolvedValue({
+      query: vi.fn().mockResolvedValue({ values: [] }),
+      run: vi.fn(),
+    });
+
+    const result = await computeNetWorth();
+
+    // PYG account: 1,000,000 PYG → 143 USD
+    // USD account: 200 USD → 1,400,000 PYG
+    expect(result.totalPyg).toBe(1000000 + 1400000);
+    expect(result.totalUsd).toBeCloseTo(143 + 200, 0);
+    expect(result.assetsPyg).toBe(result.totalPyg);
+    expect(result.assetsUsd).toBeCloseTo(result.totalUsd, 0);
   });
 });
 

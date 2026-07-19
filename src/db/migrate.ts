@@ -2,7 +2,7 @@ import type { SQLiteDBConnection } from '@capacitor-community/sqlite';
 
 // ─── Version tracking ─────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 // ─── DDL – tables are ordered so FK dependencies are always satisfied ─────────
 
