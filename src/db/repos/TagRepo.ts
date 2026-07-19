@@ -21,8 +21,10 @@ export class TagRepo {
   }
 
   /** Partially update a tag. */
+  private static VALID_COLUMNS = new Set(['name', 'color']);
+
   async update(id: number, data: Partial<Omit<Tag, 'id'>>): Promise<void> {
-    const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+    const entries = Object.entries(data).filter(([col, v]) => v !== undefined && TagRepo.VALID_COLUMNS.has(col));
     if (entries.length === 0) return;
     const setClause = entries.map(([col]) => `${col} = ?`).join(', ');
     const values = [...entries.map(([, v]) => v), id];

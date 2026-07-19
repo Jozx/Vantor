@@ -36,13 +36,15 @@ export class CashLedgerRepo {
     return result.changes?.lastId ?? 0;
   }
 
+  private static VALID_COLUMNS = new Set(['account_id', 'type', 'amount', 'occurred_at', 'description', 'tag_id', 'linked_transaction_id']);
+
   /** Partially update a cash_transaction row. */
   async update(
     id: number,
     data: Partial<Omit<CashTransaction, 'id'>>,
     transaction = true,
   ): Promise<void> {
-    const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+    const entries = Object.entries(data).filter(([col, v]) => v !== undefined && CashLedgerRepo.VALID_COLUMNS.has(col));
     if (entries.length === 0) return;
     const setClause = entries.map(([col]) => `${col} = ?`).join(', ');
     const values = [...entries.map(([, v]) => v), id];

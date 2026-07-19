@@ -156,7 +156,24 @@ export default function Transactions() {
       <div>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">Transactions</h1>
         <p className="text-sm text-zinc-400 mt-1">
-          All cash transactions across your accounts
+          {(() => {
+            const parts: string[] = [];
+            if (filterAccount) {
+              const acc = accounts.find((a) => a.id === filterAccount);
+              if (acc) parts.push(acc.name);
+            }
+            if (filterType) parts.push(filterType.replace('_', ' '));
+            if (filterTag) {
+              const tag = tags.find((t) => t.id === filterTag);
+              if (tag) parts.push(tag.name);
+            }
+            if (filterFrom || filterTo) {
+              const range = [filterFrom, filterTo].filter(Boolean).join(' to ');
+              parts.push(range);
+            }
+            if (parts.length === 0) return 'All cash transactions across your accounts';
+            return parts.join(' · ');
+          })()}
         </p>
       </div>
 

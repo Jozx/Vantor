@@ -45,6 +45,11 @@ export async function deleteAccount(id: number): Promise<void> {
 
 // ─── Cash Ledger Services ─────────────────────────────────────────────────────
 
+const VALID_CASH_TYPES: CashTransactionType[] = [
+  'income', 'expense', 'deposit', 'withdrawal',
+  'buy_debit', 'sell_credit', 'payment', 'charge', 'interest_accrual',
+];
+
 export async function getCashBalance(accountId: number): Promise<number> {
   const repos = await getRepos();
   return repos.cashLedger.runningBalance(accountId);
@@ -63,6 +68,7 @@ export async function getCashTransactions(accountId: number): Promise<CashTransa
 export async function addCashTransaction(data: Omit<CashTransaction, 'id'>): Promise<number> {
   if (data.amount <= 0) throw new Error('Amount must be greater than zero');
   if (!data.occurred_at) throw new Error('Date is required');
+  if (!VALID_CASH_TYPES.includes(data.type)) throw new Error(`Invalid transaction type: ${data.type}`);
   const repos = await getRepos();
   const account = await repos.accounts.findById(data.account_id);
   if (!account) throw new Error('Account not found');
@@ -598,10 +604,11 @@ export interface SankeyLink {
 }
 
 export interface SankeyDiagramData {
-  nodes: SankeyNode[];
-  links: SankeyLink[];
+  nodes: Array<{ name: string }>;
+  links: Array<{ source: number; target: number; value: number }>;
   totalIncome: number;
   totalExpense: number;
+  usedFallbackFx?: boolean;
 }
 
 function getPeriodBounds(period: CashFlowPeriod): { from: string; to: string } {
@@ -625,10 +632,11 @@ async function getFxConversion(
   repos: Awaited<ReturnType<typeof getRepos>>,
   from: string,
   to: string,
-): Promise<number> {
-  if (from === to) return 1;
+): Promise<{ rate: number; isFallback: boolean }> {
+  if (from === to) return { rate: 1, isFallback: false };
   const rate = await repos.marketData.latestFxRate(from, to);
-  return rate?.rate ?? 1;
+  if (rate) return { rate: rate.rate, isFallback: false };
+  return { rate: 1, isFallback: true };
 }
 
 /**
@@ -676,10 +684,12 @@ export async function getCashFlowSankeyData(
   // Batch-fetch all unique FX rates before the loop (fixes N+1)
   const uniqueCurrencies = new Set(rows.map((r) => r.account_currency));
   const fxRateCache = new Map<string, number>();
+  let usedFallbackFx = false;
   await Promise.all(
     [...uniqueCurrencies].map(async (curr) => {
-      const rate = await getFxConversion(repos, curr, baseCurrency);
+      const { rate, isFallback } = await getFxConversion(repos, curr, baseCurrency);
       fxRateCache.set(curr, rate);
+      if (isFallback) usedFallbackFx = true;
     }),
   );
 
@@ -748,7 +758,7 @@ export async function getCashFlowSankeyData(
     });
   }
 
-  return { nodes, links, totalIncome: roundedIncomeSum, totalExpense: roundedExpenseSum };
+  return { nodes, links, totalIncome: roundedIncomeSum, totalExpense: roundedExpenseSum, usedFallbackFx };
 }
 
 // ─── Net Worth Computation ───────────────────────────────────────────────────

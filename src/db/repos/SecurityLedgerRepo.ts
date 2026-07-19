@@ -34,12 +34,14 @@ export class SecurityLedgerRepo {
   }
 
   /** Partially update a security_transaction row. */
+  private static VALID_COLUMNS = new Set(['holding_id', 'type', 'quantity', 'price', 'commission', 'occurred_at']);
+
   async update(
     id: number,
     data: Partial<Omit<SecurityTransaction, 'id'>>,
     transaction = true,
   ): Promise<void> {
-    const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+    const entries = Object.entries(data).filter(([col, v]) => v !== undefined && SecurityLedgerRepo.VALID_COLUMNS.has(col));
     if (entries.length === 0) return;
     const setClause = entries.map(([col]) => `${col} = ?`).join(', ');
     const values = [...entries.map(([, v]) => v), id];

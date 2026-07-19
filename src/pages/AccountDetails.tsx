@@ -94,12 +94,13 @@ export default function AccountDetails() {
   // Tags list
   const [tags, setTags] = useState<Tag[]>([]);
 
-  const loadData = async () => {
+  const loadData = async (signal?: AbortSignal) => {
     if (!accountId) return;
     setLoading(true);
     setError('');
     try {
       const acc = await getAccountById(accountId);
+      if (signal?.aborted) return;
       if (!acc) {
         setError('Account not found');
         return;
@@ -107,24 +108,30 @@ export default function AccountDetails() {
       setAccount(acc);
 
       const bal = await getCashBalance(accountId);
+      if (signal?.aborted) return;
       setBalance(bal);
 
       if (acc.type === 'credit_card') {
         const debt = await getCardDebtBalance(accountId);
+        if (signal?.aborted) return;
         setCardDebt(debt);
       }
 
       const txs = await getCashTransactions(accountId);
+      if (signal?.aborted) return;
       setCashTransactions(txs);
 
       if (acc.type === 'broker') {
         const h = await getHoldingsWithStats(accountId);
+        if (signal?.aborted) return;
         setHoldings(h.filter((item) => item.quantity > 0));
 
         const st = await getSecurityTransactions(accountId);
+        if (signal?.aborted) return;
         setSecurityTransactions(st);
 
         const settings = await getSettings();
+        if (signal?.aborted) return;
         setHasApiKey(!!settings.stock_api_key);
 
         const prices = new Map<string, number>();
@@ -135,10 +142,10 @@ export default function AccountDetails() {
             prices.set(holding.symbol, price);
           }
         }
-        setMarketPrices(prices);
+        if (!signal?.aborted) setMarketPrices(prices);
       } else if (acc.type === 'credit_card') {
-        // Load bank accounts for payment form
         const allAccounts = await getAccounts();
+        if (signal?.aborted) return;
         setBankAccounts(allAccounts.filter((a) => a.type === 'bank'));
         setActiveTab('cash');
       } else {
@@ -146,86 +153,22 @@ export default function AccountDetails() {
       }
 
       const allTags = await getTags();
+      if (signal?.aborted) return;
       setTags(allTags);
     } catch (err: unknown) {
       console.error(err);
-      setError('Failed to load account information');
+      if (!signal?.aborted) setError('Failed to load account information');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!accountId) return;
-      setLoading(true);
-      setError('');
-      try {
-        const acc = await getAccountById(accountId);
-        if (cancelled) return;
-        if (!acc) {
-          setError('Account not found');
-          return;
-        }
-        setAccount(acc);
-
-        const bal = await getCashBalance(accountId);
-        if (cancelled) return;
-        setBalance(bal);
-
-        if (acc.type === 'credit_card') {
-          const debt = await getCardDebtBalance(accountId);
-          if (cancelled) return;
-          setCardDebt(debt);
-        }
-
-        const txs = await getCashTransactions(accountId);
-        if (cancelled) return;
-        setCashTransactions(txs);
-
-        if (acc.type === 'broker') {
-          const h = await getHoldingsWithStats(accountId);
-          if (cancelled) return;
-          setHoldings(h.filter((item) => item.quantity > 0));
-
-          const st = await getSecurityTransactions(accountId);
-          if (cancelled) return;
-          setSecurityTransactions(st);
-
-          const settings = await getSettings();
-          if (cancelled) return;
-          setHasApiKey(!!settings.stock_api_key);
-
-          const prices = new Map<string, number>();
-          for (const holding of h) {
-            if (holding.quantity <= 0) continue;
-            const price = await getSecurityPrice(holding.symbol);
-            if (price !== null) {
-              prices.set(holding.symbol, price);
-            }
-          }
-          if (!cancelled) setMarketPrices(prices);
-        } else if (acc.type === 'credit_card') {
-          const allAccounts = await getAccounts();
-          if (cancelled) return;
-          setBankAccounts(allAccounts.filter((a) => a.type === 'bank'));
-          setActiveTab('cash');
-        } else {
-          setActiveTab('cash');
-        }
-
-        const allTags = await getTags();
-        if (cancelled) return;
-        setTags(allTags);
-      } catch (err: unknown) {
-        console.error(err);
-        if (!cancelled) setError('Failed to load account information');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData(controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId]);
 
   // Handle Buy/Sell submission (Broker)
@@ -744,6 +687,9 @@ export default function AccountDetails() {
                         onChange={(e) => setChargeDate(e.target.value)}
                         className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                       />
+                      {chargeDate && chargeDate > new Date().toISOString().split('T')[0] && (
+                        <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">This date is in the future.</p>
+                      )}
                     </div>
                   </div>
 
@@ -858,6 +804,9 @@ export default function AccountDetails() {
                         onChange={(e) => setPayDate(e.target.value)}
                         className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                       />
+                      {payDate && payDate > new Date().toISOString().split('T')[0] && (
+                        <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">This date is in the future.</p>
+                      )}
                     </div>
                   </div>
 
@@ -942,6 +891,9 @@ export default function AccountDetails() {
                       onChange={(e) => setCashDate(e.target.value)}
                       className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     />
+                    {cashDate && cashDate > new Date().toISOString().split('T')[0] && (
+                      <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">This date is in the future.</p>
+                    )}
                   </div>
                 </div>
 
@@ -1136,8 +1088,8 @@ export default function AccountDetails() {
                                   setQuantity(h.quantity);
                                 }}
                                 className={cn(
-                                  buttonVariants({ variant: 'outline', size: 'xs' }),
-                                  'text-xs text-rose-500 border-rose-500/20 dark:border-rose-950/50 hover:bg-rose-50 dark:hover:bg-rose-950/10 cursor-pointer font-bold'
+                                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                                  'text-xs text-rose-500 border-rose-500/20 dark:border-rose-950/50 hover:bg-rose-50 dark:hover:bg-rose-950/10 cursor-pointer font-bold min-h-[44px]'
                                 )}
                               >
                                 Sell Position

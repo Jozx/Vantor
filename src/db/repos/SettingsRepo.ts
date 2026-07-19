@@ -41,8 +41,10 @@ export class SettingsRepo {
    * Column names come from the typed key set of `Settings` (id excluded).
    * All values are parameterised – no string interpolation of caller data.
    */
+  private static VALID_COLUMNS = new Set(['stock_api_key', 'fx_api_key', 'base_currency', 'theme']);
+
   async update(data: Partial<Omit<Settings, 'id'>>): Promise<void> {
-    const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+    const entries = Object.entries(data).filter(([col, v]) => v !== undefined && SettingsRepo.VALID_COLUMNS.has(col));
     if (entries.length === 0) return;
     const setClause = entries.map(([col]) => `${col} = ?`).join(', ');
     const values = [...entries.map(([, v]) => v)];

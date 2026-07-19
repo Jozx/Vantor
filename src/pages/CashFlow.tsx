@@ -9,8 +9,8 @@ import type {
   CashFlowPeriod,
   SankeyDiagramData,
 } from '@/services/financeService';
-import { cn } from '@/lib/utils';
-import { AlertCircle, ArrowLeftRight } from 'lucide-react';
+import { cn, formatMoney } from '@/lib/utils';
+import { AlertCircle, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -206,17 +206,26 @@ export default function CashFlow() {
 
       {/* Summary */}
       {!loading && data && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <>
+          {data.usedFallbackFx && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <span className="text-sm font-medium">
+                Some conversions used a default 1:1 rate because no exchange rate was stored. Add rates in Settings for accurate results.
+              </span>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-5 shadow-xs">
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Income</p>
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-              {formatAmount(data.totalIncome)} {baseCurrency}
+              {formatMoney(data.totalIncome, baseCurrency as 'PYG' | 'USD')}
             </p>
           </div>
           <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-5 shadow-xs">
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Expenses</p>
             <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-              {formatAmount(data.totalExpense)} {baseCurrency}
+              {formatMoney(data.totalExpense, baseCurrency as 'PYG' | 'USD')}
             </p>
           </div>
           <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-5 shadow-xs">
@@ -229,10 +238,11 @@ export default function CashFlow() {
                   : 'text-rose-600 dark:text-rose-400',
               )}
             >
-              {formatAmount(data.totalIncome - data.totalExpense)} {baseCurrency}
+              {formatMoney(data.totalIncome - data.totalExpense, baseCurrency as 'PYG' | 'USD')}
             </p>
           </div>
         </div>
+        </>
       )}
 
       {/* Sankey Diagram */}

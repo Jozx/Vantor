@@ -535,8 +535,7 @@ export default function Home() {
             onClick={handleExport}
             disabled={exporting}
             className={cn(
-              buttonVariants({ variant: 'outline', size: 'sm' }),
-              'flex items-center gap-2 text-xs font-semibold cursor-pointer',
+              'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer min-h-[44px]',
               exporting && 'opacity-50 cursor-not-allowed'
             )}
           >
@@ -547,8 +546,7 @@ export default function Home() {
             onClick={() => fileInputRef.current?.click()}
             disabled={importing}
             className={cn(
-              buttonVariants({ variant: 'outline', size: 'sm' }),
-              'flex items-center gap-2 text-xs font-semibold cursor-pointer',
+              'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer min-h-[44px]',
               importing && 'opacity-50 cursor-not-allowed'
             )}
           >

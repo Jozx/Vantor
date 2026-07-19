@@ -408,14 +408,14 @@ export default function Accounts({ filterType }: AccountsProps) {
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => handleOpenEditModal(acc)}
-                                  className="p-2.5 text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+                                  className="p-2.5 text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
                                   title="Edit account"
                                 >
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
                                 <button
                                   onClick={() => handleDelete(acc.id, acc.name)}
-                                  className="p-2.5 text-rose-500 hover:text-rose-700 dark:text-rose-400/80 dark:hover:text-rose-400 border border-rose-200/20 dark:border-rose-900/30 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+                                  className="p-2.5 text-rose-500 hover:text-rose-700 dark:text-rose-400/80 dark:hover:text-rose-400 border border-rose-200/20 dark:border-rose-900/30 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
                                   title="Delete account"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />

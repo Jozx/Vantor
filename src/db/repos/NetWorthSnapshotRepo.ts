@@ -40,12 +40,14 @@ export class NetWorthSnapshotRepo {
     return result.changes?.lastId ?? 0;
   }
 
+  private static VALID_COLUMNS = new Set(['total_pyg', 'total_usd', 'breakdown_json', 'snapshot_date']);
+
   /** Partially update a snapshot row. */
   async update(
     id: number,
     data: Partial<Omit<NetWorthSnapshot, 'id'>>,
   ): Promise<void> {
-    const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+    const entries = Object.entries(data).filter(([col, v]) => v !== undefined && NetWorthSnapshotRepo.VALID_COLUMNS.has(col));
     if (entries.length === 0) return;
     const setClause = entries.map(([col]) => `${col} = ?`).join(', ');
     const values = [...entries.map(([, v]) => v), id];
