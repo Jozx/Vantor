@@ -48,5 +48,4 @@ android/app/src/main/res/xml/config.xml
 *.sw?
 
 # Internal docs
-docs/*
-!docs/AUDIT_REPORT.md
+docs/
