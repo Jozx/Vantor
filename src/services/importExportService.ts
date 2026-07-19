@@ -2,6 +2,9 @@ import { getRepos, getDb, withTransaction } from '@/db';
 import { todayISO } from '@/lib/utils';
 import Papa from 'papaparse';
 import { zipSync, unzipSync } from 'fflate';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -48,17 +51,17 @@ const TABLES: Record<string, TableConfig> = {
     insertSql: 'INSERT INTO holdings (id, account_id, symbol, currency, market) VALUES (?, ?, ?, ?, ?)',
   },
   security_transactions: {
-    columns: ['id', 'holding_id', 'type', 'quantity', 'price', 'commission', 'occurred_at'],
+    columns: ['id', 'holding_id', 'type', 'quantity', 'price', 'commission', 'occurred_at', 'created_at'],
     insertSql:
-      'INSERT INTO security_transactions (id, holding_id, type, quantity, price, commission, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO security_transactions (id, holding_id, type, quantity, price, commission, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   },
   cash_transactions: {
     columns: [
       'id', 'account_id', 'type', 'amount', 'tag_id',
-      'description', 'occurred_at', 'related_security_transaction_id', 'linked_transaction_id',
+      'description', 'occurred_at', 'related_security_transaction_id', 'linked_transaction_id', 'created_at',
     ],
     insertSql:
-      'INSERT INTO cash_transactions (id, account_id, type, amount, tag_id, description, occurred_at, related_security_transaction_id, linked_transaction_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO cash_transactions (id, account_id, type, amount, tag_id, description, occurred_at, related_security_transaction_id, linked_transaction_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   },
   fx_rates: {
     columns: ['id', 'base', 'quote', 'rate', 'fetched_at'],
@@ -185,7 +188,7 @@ export function parseImportZip(zipBlob: Blob): Promise<ImportManifest> {
             return;
           }
 
-          const expectedCols = TABLES[tableName].columns;
+          const expectedCols = TABLES[tableName].exportColumns ?? TABLES[tableName].columns;
           const actualCols = parsed.meta.fields ?? [];
           const missing = expectedCols.filter((c) => !actualCols.includes(c));
           if (missing.length > 0) {
@@ -289,11 +292,18 @@ export async function commitImport(zipBlob: Blob): Promise<ImportResult> {
               if (!isNaN(num)) row[key] = num;
             }
           }
+          const exportCols = config.exportColumns ?? config.columns;
           const values = config.insertSql.match(/\?/g)!.map((_, i) => {
             const col = config.columns[i];
             if (col === undefined) return null; // missing column in export, use default
             const val = row[col];
-            if (val === '' || val === undefined || val === null) {
+            if (val === undefined || val === null) {
+              return null;
+            }
+            // Only coerce truly empty strings to null for columns that weren't
+            // in the original export CSV — columns we synthesise in code
+            // (like stock_api_key) must keep their explicitly-set '' values.
+            if (val === '' && exportCols.includes(col)) {
               return null;
             }
             return val;
@@ -311,9 +321,15 @@ export async function commitImport(zipBlob: Blob): Promise<ImportResult> {
           ...rows.map((r) => Number(r.id) || 0),
         );
 
+        // Use DELETE + INSERT instead of ON CONFLICT — sql.js doesn't
+        // always expose the UNIQUE constraint on sqlite_sequence.name.
         await db.run(
-          `INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)
-           ON CONFLICT(name) DO UPDATE SET seq = excluded.seq`,
+          `DELETE FROM sqlite_sequence WHERE name = ?`,
+          [tableName],
+          false,
+        );
+        await db.run(
+          `INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)`,
           [tableName, maxId],
           false,
         );
@@ -333,9 +349,33 @@ export async function commitImport(zipBlob: Blob): Promise<ImportResult> {
 // ─── Download / Share Helpers ────────────────────────────────────────────────
 
 /**
- * Trigger a browser file download for the given Blob.
+ * Trigger a download / share for the given Blob.
+ *
+ * On native (Android/iOS): writes the zip to the cache directory, then opens
+ * the platform Share sheet so the user can save or send it.
+ * On web: uses the <a download> browser trick.
  */
-export function triggerDownload(blob: Blob, filename: string): void {
+export async function triggerDownload(blob: Blob, filename: string): Promise<void> {
+  if (Capacitor.getPlatform() !== 'web') {
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''),
+    );
+
+    const result = await Filesystem.writeFile({
+      path: filename,
+      data: base64,
+      directory: Directory.Cache,
+    });
+
+    await Share.share({
+      title: filename,
+      files: [result.uri],
+    });
+    return;
+  }
+
+  // Browser / web fallback
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

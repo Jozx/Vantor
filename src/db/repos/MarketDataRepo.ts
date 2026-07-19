@@ -18,10 +18,11 @@ export class MarketDataRepo {
   // ── FX Rates ──────────────────────────────────────────────────────────────
 
   /** Insert a new FX rate snapshot and return its generated id. */
-  async insertFxRate(data: Omit<FxRate, 'id'>): Promise<number> {
+  async insertFxRate(data: Omit<FxRate, 'id'>, transaction = true): Promise<number> {
     const result = await this.db.run(
       'INSERT INTO fx_rates (base, quote, rate, fetched_at) VALUES (?, ?, ?, ?)',
       [data.base, data.quote, data.rate, data.fetched_at],
+      transaction,
     );
     return result.changes?.lastId ?? 0;
   }
@@ -64,10 +65,11 @@ export class MarketDataRepo {
   // ── Security Prices ───────────────────────────────────────────────────────
 
   /** Insert a new security price snapshot and return its generated id. */
-  async insertSecurityPrice(data: Omit<SecurityPrice, 'id'>): Promise<number> {
+  async insertSecurityPrice(data: Omit<SecurityPrice, 'id'>, transaction = true): Promise<number> {
     const result = await this.db.run(
       'INSERT INTO security_prices (symbol, price, currency, fetched_at) VALUES (?, ?, ?, ?)',
       [data.symbol, data.price, data.currency, data.fetched_at],
+      transaction,
     );
     return result.changes?.lastId ?? 0;
   }

@@ -147,7 +147,7 @@ export default function Home() {
     setExportError('');
     try {
       const blob = await exportToZip();
-      triggerDownload(blob, backupFilename());
+      await triggerDownload(blob, backupFilename());
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'Export failed');
     } finally {
@@ -634,6 +634,9 @@ export default function Home() {
                 <span className="font-mono font-bold text-zinc-900 dark:text-zinc-50">{importManifest.totalRows} rows</span>
               </div>
             </div>
+            <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-4">
+              API keys are never exported. After import, re-enter your Finnhub and FX keys in Settings.
+            </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => { setShowConfirm(false); setPendingZipBlob(null); setImportManifest(null); }}

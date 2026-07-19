@@ -254,7 +254,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col text-zinc-900 dark:text-zinc-100">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col text-zinc-900 dark:text-zinc-100 overflow-x-hidden">
       <Header onMenuOpen={openSidebar} />
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="flex flex-1">

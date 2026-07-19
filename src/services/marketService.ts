@@ -123,7 +123,7 @@ export async function refreshMarketData(
           quote: quoteCurrency,
           rate,
           fetched_at: now,
-        });
+        }, false);
 
         // Store quote → base (inverse rate)
         if (rate > 0) {
@@ -132,7 +132,7 @@ export async function refreshMarketData(
             quote: baseCurrency,
             rate: 1 / rate,
             fetched_at: now,
-          });
+          }, false);
         }
       }
 
@@ -142,7 +142,7 @@ export async function refreshMarketData(
           price,
           currency: currency as 'PYG' | 'USD',
           fetched_at: now,
-        });
+        }, false);
       }
     });
 

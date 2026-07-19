@@ -4,6 +4,7 @@ import {
   getAccounts,
   getCashBalanceBatch,
   getHoldingsWithStats,
+  getCardDebtBalance,
 } from '@/services/financeService';
 import type { Account, AccountType } from '@/db';
 import { getRepos } from '@/db';
@@ -166,7 +167,7 @@ export default function Reports() {
             { label: 'Securities Sold', amount: totalSells, color: 'emerald', icon: ArrowDownRight },
           );
         } else if (reportType === 'credit_card') {
-          // Credit card: charges, payments
+          // Credit card: charges, payments (period-scoped), available credit (cumulative)
           let totalCharges = 0;
           let totalPayments = 0;
           for (const acc of typeAccounts) {
@@ -176,9 +177,14 @@ export default function Reports() {
               else if (tx.type === 'payment') totalPayments += tx.amount;
             }
           }
-          const totalLimit = typeAccounts.reduce((s, a) => s + (a.credit_limit ?? 0), 0);
-          const totalDebt = totalCharges - totalPayments;
-          const available = totalLimit - totalDebt;
+          // Available credit uses cumulative debt (all-time), not just the selected period
+          let totalLimit = 0;
+          let cumulativeDebt = 0;
+          for (const acc of typeAccounts) {
+            totalLimit += acc.credit_limit ?? 0;
+            cumulativeDebt += await getCardDebtBalance(acc.id);
+          }
+          const available = totalLimit - cumulativeDebt;
 
           result.push(
             { label: 'Charges This Month', amount: totalCharges, color: 'rose', icon: ArrowUpRight },
@@ -232,7 +238,7 @@ export default function Reports() {
       {/* Controls */}
       <div className="flex flex-wrap gap-4">
         {/* Account Type */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto flex-nowrap">
           {(['bank', 'mutual_fund', 'broker', 'credit_card'] as ReportType[]).map((t) => {
             const cfg = accountTypeConfig[t];
             const Icon = cfg.icon;
@@ -243,7 +249,7 @@ export default function Reports() {
                 onClick={() => setReportType(t)}
                 disabled={count === 0}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer',
+                  'shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer',
                   reportType === t
                     ? 'bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 border-zinc-900 dark:border-zinc-50'
                     : 'bg-white dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-400 border-zinc-200/50 dark:border-zinc-800/50 hover:bg-zinc-100 dark:hover:bg-zinc-800',

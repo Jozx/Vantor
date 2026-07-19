@@ -48,7 +48,7 @@ export async function refreshNetWorthSnapshot(): Promise<{
         total_usd: result.totalUsd,
         breakdown_json: JSON.stringify(result.breakdown),
         snapshot_date: today,
-      });
+      }, false);
     });
 
     lastSnapshotDate = today;

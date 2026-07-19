@@ -80,6 +80,191 @@ export async function deleteCashTransaction(id: number): Promise<void> {
   return repos.cashLedger.remove(id);
 }
 
+/**
+ * Edit a standalone cash transaction (amount/description/date/tag).
+ * Re-validates balance or credit-limit after the edit.
+ * For linked pairs (transfers, CC payments), updates both sides in sync.
+ */
+export async function editCashTransaction(
+  id: number,
+  data: { amount?: number; description?: string; occurred_at?: string; tag_id?: number | null },
+): Promise<void> {
+  if (data.amount !== undefined && data.amount <= 0) throw new Error('Amount must be greater than zero');
+  const repos = await getRepos();
+
+  const current = await repos.cashLedger.findById(id);
+  if (!current) throw new Error('Transaction not found');
+
+  const isLinked = current.linked_transaction_id != null;
+  const linkedId = current.linked_transaction_id;
+
+  await withTransaction(async () => {
+    // Apply update to this row
+    await repos.cashLedger.update(id, { ...data }, false);
+
+    // If linked pair, keep both sides in sync for amount
+    if (isLinked && linkedId && data.amount !== undefined) {
+      const linked = await repos.cashLedger.findById(linkedId);
+      if (linked) {
+        await repos.cashLedger.update(linkedId, { amount: data.amount }, false);
+      }
+    }
+
+    // Re-validate
+    if (current.account_id) {
+      const account = await repos.accounts.findById(current.account_id);
+      if (account?.type === 'credit_card') {
+        const debt = await getCardDebtBalance(current.account_id);
+        const limit = account.credit_limit ?? 0;
+        if (limit > 0 && debt > limit) {
+          throw new Error(`Edit would exceed credit limit. Available: ${(limit - debt).toLocaleString()}`);
+        }
+      } else {
+        const bal = await repos.cashLedger.runningBalance(current.account_id);
+        if (bal < 0) {
+          throw new Error('Edit would result in a negative balance');
+        }
+      }
+    }
+
+    // Also re-validate the linked account if applicable
+    if (isLinked && linkedId && data.amount !== undefined) {
+      const linked = await repos.cashLedger.findById(linkedId);
+      if (linked) {
+        const linkedAccount = await repos.accounts.findById(linked.account_id);
+        if (linkedAccount?.type === 'credit_card') {
+          const debt = await getCardDebtBalance(linked.account_id);
+          const limit = linkedAccount.credit_limit ?? 0;
+          if (limit > 0 && debt > limit) {
+            throw new Error('Edit would exceed credit limit on linked account');
+          }
+        } else {
+          const bal = await repos.cashLedger.runningBalance(linked.account_id);
+          if (bal < 0) {
+            throw new Error('Edit would result in a negative balance on linked account');
+          }
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Delete a standalone cash transaction and re-validate balance.
+ * Rejects if it's a linked pair or a trade-associated row — use the specific functions instead.
+ */
+export async function deleteCashTransactionValidated(id: number): Promise<void> {
+  const repos = await getRepos();
+  const current = await repos.cashLedger.findById(id);
+  if (!current) throw new Error('Transaction not found');
+  if (current.linked_transaction_id) {
+    throw new Error('This transaction is part of a linked pair. Use deleteLinkedTransaction instead.');
+  }
+  if (current.related_security_transaction_id) {
+    throw new Error('This transaction is linked to a trade. Use deleteTrade instead.');
+  }
+
+  await withTransaction(async () => {
+    await repos.cashLedger.remove(id, false);
+
+    const account = await repos.accounts.findById(current.account_id);
+    if (account?.type === 'credit_card') {
+      const debt = await getCardDebtBalance(current.account_id);
+      const limit = account.credit_limit ?? 0;
+      if (limit > 0 && debt > limit) {
+        throw new Error(`Deletion would exceed credit limit. Available: ${(limit - debt).toLocaleString()}`);
+      }
+    } else {
+      const bal = await repos.cashLedger.runningBalance(current.account_id);
+      if (bal < 0) {
+        throw new Error('Deletion would result in a negative balance');
+      }
+    }
+  });
+}
+
+/**
+ * Delete both sides of a linked pair (transfer / CC payment).
+ * Re-validates balances on both affected accounts.
+ */
+export async function deleteLinkedTransaction(id: number): Promise<void> {
+  const repos = await getRepos();
+  const current = await repos.cashLedger.findById(id);
+  if (!current) throw new Error('Transaction not found');
+  if (!current.linked_transaction_id) {
+    throw new Error('This transaction is not part of a linked pair');
+  }
+
+  const linkedId = current.linked_transaction_id;
+  const linked = await repos.cashLedger.findById(linkedId);
+  if (!linked) throw new Error('Linked transaction not found');
+
+  const accountIds = new Set([current.account_id, linked.account_id]);
+
+  await withTransaction(async () => {
+    // Delete both sides (order doesn't matter within a transaction)
+    await repos.cashLedger.remove(id, false);
+    await repos.cashLedger.remove(linkedId, false);
+
+    // Re-validate every affected account
+    for (const accountId of accountIds) {
+      const account = await repos.accounts.findById(accountId);
+      if (!account) continue;
+      if (account.type === 'credit_card') {
+        const debt = await getCardDebtBalance(accountId);
+        const limit = account.credit_limit ?? 0;
+        if (limit > 0 && debt > limit) {
+          throw new Error(`Deletion would exceed credit limit on ${account.name}`);
+        }
+      } else {
+        const bal = await repos.cashLedger.runningBalance(accountId);
+        if (bal < 0) {
+          throw new Error(`Deletion would result in a negative balance on ${account.name}`);
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Delete a security trade: removes both the security transaction row and its
+ * linked cash transaction (buy_debit or sell_credit). Re-validates balance.
+ */
+export async function deleteTrade(tradeId: number): Promise<void> {
+  const repos = await getRepos();
+  const trade = await repos.securityLedger.findById(tradeId);
+  if (!trade) throw new Error('Trade not found');
+
+  // Find the cash row that references this trade
+  const cashRows = await repos.cashLedger.findAll();
+  const cashRow = cashRows.find((r) => r.related_security_transaction_id === tradeId);
+
+  await withTransaction(async () => {
+    // Delete both rows
+    await repos.securityLedger.remove(tradeId, false);
+    if (cashRow) {
+      await repos.cashLedger.remove(cashRow.id, false);
+    }
+
+    // Re-validate the account
+    if (cashRow) {
+      const account = await repos.accounts.findById(cashRow.account_id);
+      if (account?.type === 'credit_card') {
+        const debt = await getCardDebtBalance(cashRow.account_id);
+        const limit = account.credit_limit ?? 0;
+        if (limit > 0 && debt > limit) {
+          throw new Error(`Trade deletion would exceed credit limit on ${account.name}`);
+        }
+      } else {
+        const bal = await repos.cashLedger.runningBalance(cashRow.account_id);
+        if (bal < 0) {
+          throw new Error(`Trade deletion would result in a negative balance on account #${cashRow.account_id}`);
+        }
+      }
+    }
+  });
+}
+
 // ─── Holdings & Trades Services ───────────────────────────────────────────────
 
 export async function getHoldingsWithStats(accountId: number): Promise<HoldingWithStats[]> {

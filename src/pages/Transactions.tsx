@@ -3,9 +3,15 @@ import {
   getAllCashTransactions,
   getAccounts,
   getTags,
+  editCashTransaction,
+  deleteCashTransactionValidated,
+  deleteLinkedTransaction,
+  deleteTrade,
 } from '@/services/financeService';
 import type { CashTransactionWithAccount } from '@/services/financeService';
 import type { Account, CashTransactionType, Tag } from '@/db';
+import { buttonVariants } from '@/components/ui/button';
+import AmountInput from '@/components/AmountInput';
 import { cn, formatMoney, displayTag } from '@/lib/utils';
 import {
   Calendar,
@@ -14,6 +20,8 @@ import {
   ArrowUp,
   ArrowDown,
   AlertCircle,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 
 type SortField = 'occurred_at' | 'amount' | 'type' | 'account_name' | 'tag_name';
@@ -38,6 +46,15 @@ export default function Transactions() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const mountedRef = useRef(false);
+
+  // Edit modal state
+  const [editingTx, setEditingTx] = useState<CashTransactionWithAccount | null>(null);
+  const [editAmount, setEditAmount] = useState<number>(0);
+  const [editDesc, setEditDesc] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editTagId, setEditTagId] = useState<number | null>(null);
+  const [editError, setEditError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const loadTransactions = async () => {
     try {
@@ -129,6 +146,55 @@ export default function Transactions() {
   };
 
   const hasActiveFilters = filterAccount !== '' || filterTag !== '' || filterType !== '' || filterFrom !== '' || filterTo !== '';
+
+  const handleDelete = async (tx: CashTransactionWithAccount) => {
+    if (!window.confirm('Delete this transaction? This will update the running balance.')) return;
+    try {
+      if (tx.linked_transaction_id) {
+        await deleteLinkedTransaction(tx.id);
+      } else if (tx.related_security_transaction_id) {
+        await deleteTrade(tx.related_security_transaction_id);
+      } else {
+        await deleteCashTransactionValidated(tx.id);
+      }
+      await loadTransactions();
+    } catch (err: unknown) {
+      console.error(err);
+    }
+  };
+
+  const openEditModal = (tx: CashTransactionWithAccount) => {
+    setEditingTx(tx);
+    setEditAmount(tx.amount);
+    setEditDesc(tx.description);
+    setEditDate(tx.occurred_at);
+    setEditTagId(tx.tag_id);
+    setEditError('');
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingTx) return;
+    setEditError('');
+    if (editAmount <= 0) {
+      setEditError('Amount must be greater than zero');
+      return;
+    }
+    setSaving(true);
+    try {
+      await editCashTransaction(editingTx.id, {
+        amount: editAmount,
+        description: editDesc,
+        occurred_at: editDate,
+        tag_id: editTagId,
+      });
+      setEditingTx(null);
+      await loadTransactions();
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update transaction');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -344,6 +410,7 @@ export default function Transactions() {
                       Amount {renderSortIcon("amount")}
                     </span>
                   </th>
+                  <th className="px-6 py-3 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200/30 dark:divide-zinc-800/30">
@@ -356,9 +423,16 @@ export default function Transactions() {
                   ].includes(tx.type);
                   return (
                     <tr key={tx.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-900/20">
-                      <td className="px-6 py-4 text-xs text-zinc-400 flex items-center gap-1.5 whitespace-nowrap">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {tx.occurred_at}
+                      <td className="px-6 py-4 text-xs text-zinc-400 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {tx.occurred_at}
+                        </div>
+                        {tx.created_at && (
+                          <div className="text-[10px] text-zinc-300 dark:text-zinc-600 mt-0.5 ml-5">
+                            created {tx.created_at}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <span
@@ -392,16 +466,34 @@ export default function Transactions() {
                       <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300 max-w-[200px] truncate">
                         {tx.description}
                       </td>
-                      <td
-                        className={cn(
-                          'px-6 py-4 text-right font-bold',
-                          isPositive
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-rose-600 dark:text-rose-400'
-                        )}
-                      >
-                        {isPositive ? '+' : '-'}{formatMoney(tx.amount, tx.account_currency)}
-                      </td>
+                        <td
+                          className={cn(
+                            'px-6 py-4 text-right font-bold',
+                            isPositive
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-rose-600 dark:text-rose-400'
+                          )}
+                        >
+                          {isPositive ? '+' : '-'}{formatMoney(tx.amount, tx.account_currency)}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => openEditModal(tx)}
+                              className="p-3 text-zinc-400 hover:text-blue-500 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="Edit transaction"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(tx)}
+                              className="p-3 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                              title="Delete transaction"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
                     </tr>
                   );
                 })}
@@ -410,6 +502,57 @@ export default function Transactions() {
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 mb-4">Edit Transaction</h3>
+            {editError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg flex items-center gap-2 text-xs mb-4">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="font-medium">{editError}</span>
+              </div>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Amount</label>
+                <AmountInput value={editAmount} onChange={setEditAmount} currency={editingTx.account_currency as 'PYG' | 'USD'} placeholder="0" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Date</label>
+                <input type="date" required value={editDate} onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Description</label>
+                <input type="text" value={editDesc} onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Tag</label>
+                <select value={editTagId === null ? '' : String(editTagId)} onChange={(e) => setEditTagId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                  <option value="">No tag</option>
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>{tag.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button onClick={() => setEditingTx(null)}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'text-xs font-semibold cursor-pointer')}>
+                Cancel
+              </button>
+              <button onClick={handleEditSubmit} disabled={saving}
+                className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 text-xs font-semibold cursor-pointer', saving && 'opacity-50 cursor-not-allowed')}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

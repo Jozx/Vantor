@@ -2,7 +2,7 @@ import type { SQLiteDBConnection } from '@capacitor-community/sqlite';
 
 // ─── Version tracking ─────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 // ─── DDL – tables are ordered so FK dependencies are always satisfied ─────────
 
@@ -304,5 +304,14 @@ export async function runMigrations(db: SQLiteDBConnection): Promise<void> {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_cash_transactions_type ON cash_transactions(type);');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(type);');
     await db.execute('PRAGMA user_version = 6;');
+  }
+
+  // ── v6 → v7 : add audit created_at timestamps ─────────────────────────────
+  if (currentVersion < 7) {
+    await db.execute("ALTER TABLE cash_transactions ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
+    await db.execute("ALTER TABLE security_transactions ADD COLUMN created_at TEXT NOT NULL DEFAULT ''");
+    await db.execute("UPDATE cash_transactions SET created_at = occurred_at WHERE created_at = ''");
+    await db.execute("UPDATE security_transactions SET created_at = occurred_at WHERE created_at = ''");
+    await db.execute('PRAGMA user_version = 7;');
   }
 }

@@ -5,7 +5,10 @@ import {
   getCashBalance,
   getCashTransactions,
   addCashTransaction,
-  deleteCashTransaction,
+  deleteCashTransactionValidated,
+  deleteLinkedTransaction,
+  deleteTrade,
+  editCashTransaction,
   getHoldingsWithStats,
   getSecurityTransactions,
   buySecurity,
@@ -30,6 +33,7 @@ import {
   TrendingUp,
   Landmark,
   Trash2,
+  Pencil,
   Calendar,
   AlertCircle,
   Briefcase,
@@ -93,6 +97,14 @@ export default function AccountDetails() {
 
   // Tags list
   const [tags, setTags] = useState<Tag[]>([]);
+
+  // Edit modal state
+  const [editingTx, setEditingTx] = useState<CashTransaction | null>(null);
+  const [editAmount, setEditAmount] = useState<number>(0);
+  const [editDesc, setEditDesc] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editTagId, setEditTagId] = useState<number | null>(null);
+  const [editError, setEditError] = useState('');
 
   const loadData = async (signal?: AbortSignal) => {
     if (!accountId) return;
@@ -311,11 +323,64 @@ export default function AccountDetails() {
       return;
     }
     try {
-      await deleteCashTransaction(txId);
+      // Try the specific delete first; fall back to validated simple delete
+      const tx = cashTransactions.find((t) => t.id === txId);
+      if (tx?.linked_transaction_id) {
+        await deleteLinkedTransaction(txId);
+      } else if (tx?.related_security_transaction_id) {
+        await deleteTrade(tx.related_security_transaction_id);
+      } else {
+        await deleteCashTransactionValidated(txId);
+      }
       await loadData();
     } catch (err: unknown) {
       console.error(err);
-      setError('Failed to delete transaction');
+      setError(err instanceof Error ? err.message : 'Failed to delete transaction');
+    }
+  };
+
+  // ── Delete a trade from the trade log ───────────────────────────────────────
+  const handleDeleteTrade = async (tradeId: number) => {
+    if (!window.confirm('Delete this trade and its associated cash entry? This will update balances.')) {
+      return;
+    }
+    try {
+      await deleteTrade(tradeId);
+      await loadData();
+    } catch (err: unknown) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Failed to delete trade');
+    }
+  };
+
+  // ── Edit cash transaction ───────────────────────────────────────────────────
+  const openEditModal = (tx: CashTransaction) => {
+    setEditingTx(tx);
+    setEditAmount(tx.amount);
+    setEditDesc(tx.description);
+    setEditDate(tx.occurred_at);
+    setEditTagId(tx.tag_id);
+    setEditError('');
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editingTx) return;
+    setEditError('');
+    if (editAmount <= 0) {
+      setEditError('Amount must be greater than zero');
+      return;
+    }
+    try {
+      await editCashTransaction(editingTx.id, {
+        amount: editAmount,
+        description: editDesc,
+        occurred_at: editDate,
+        tag_id: editTagId,
+      });
+      setEditingTx(null);
+      await loadData();
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update transaction');
     }
   };
 
@@ -1140,7 +1205,7 @@ export default function AccountDetails() {
                         <th className="px-6 py-3">Tag</th>
                         <th className="px-6 py-3">Description</th>
                         <th className="px-6 py-3 text-right">Amount</th>
-                        <th className="px-6 py-3 text-center">Action</th>
+                        <th className="px-6 py-3 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200/30 dark:divide-zinc-800/30">
@@ -1154,9 +1219,16 @@ export default function AccountDetails() {
                         const txTag = tx.tag_id ? tags.find((t) => t.id === tx.tag_id) : null;
                         return (
                           <tr key={tx.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-900/20">
-                            <td className="px-6 py-4 text-xs text-zinc-400 flex items-center gap-1.5 whitespace-nowrap">
-                              <Calendar className="h-3.5 w-3.5" />
-                              {tx.occurred_at}
+                            <td className="px-6 py-4 text-xs text-zinc-400 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {tx.occurred_at}
+                              </div>
+                              {tx.created_at && (
+                                <div className="text-[10px] text-zinc-300 dark:text-zinc-600 mt-0.5 ml-5">
+                                  created {tx.created_at}
+                                </div>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               <span
@@ -1196,13 +1268,22 @@ export default function AccountDetails() {
                               {isPositive ? '+' : '-'}{formatMoney(tx.amount, account.currency)}
                             </td>
                             <td className="px-6 py-4 text-center">
-                              <button
-                                onClick={() => handleDeleteCashTx(tx.id)}
-                                className="p-3 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
-                                title="Delete entry"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => openEditModal(tx)}
+                                  className="p-3 text-zinc-400 hover:text-blue-500 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                  title="Edit entry"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCashTx(tx.id)}
+                                  className="p-3 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                  title="Delete entry"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1239,6 +1320,7 @@ export default function AccountDetails() {
                         <th className="px-6 py-3 text-right">Price</th>
                         <th className="px-6 py-3 text-right">Comm.</th>
                         <th className="px-6 py-3 text-right">Net Value</th>
+                        <th className="px-6 py-3 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200/30 dark:divide-zinc-800/30">
@@ -1249,9 +1331,16 @@ export default function AccountDetails() {
                           : st.quantity * st.price - st.commission;
                         return (
                           <tr key={st.id} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-900/20">
-                            <td className="px-6 py-4 text-xs text-zinc-400 flex items-center gap-1.5 whitespace-nowrap">
-                              <Calendar className="h-3.5 w-3.5" />
-                              {st.occurred_at}
+                            <td className="px-6 py-4 text-xs text-zinc-400 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {st.occurred_at}
+                              </div>
+                              {st.created_at && (
+                                <div className="text-[10px] text-zinc-300 dark:text-zinc-600 mt-0.5 ml-5">
+                                  created {st.created_at}
+                                </div>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               <span
@@ -1275,6 +1364,15 @@ export default function AccountDetails() {
                             <td className="px-6 py-4 text-right font-bold">
                               {formatMoney(netVal, account.currency)}
                             </td>
+                            <td className="px-6 py-4 text-center">
+                              <button
+                                onClick={() => handleDeleteTrade(st.id)}
+                                className="p-3 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center mx-auto"
+                                title="Delete trade"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -1286,6 +1384,57 @@ export default function AccountDetails() {
           )}
         </div>
       </div>
+
+      {/* Edit Cash Transaction Modal */}
+      {editingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 mb-4">Edit Transaction</h3>
+            {editError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg flex items-center gap-2 text-xs mb-4">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span className="font-medium">{editError}</span>
+              </div>
+            )}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Amount</label>
+                <AmountInput value={editAmount} onChange={setEditAmount} currency={account.currency} placeholder="0" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Date</label>
+                <input type="date" required value={editDate} onChange={(e) => setEditDate(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Description</label>
+                <input type="text" value={editDesc} onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Tag</label>
+                <select value={editTagId === null ? '' : String(editTagId)} onChange={(e) => setEditTagId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                  <option value="">No tag</option>
+                  {tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>{tag.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button onClick={() => setEditingTx(null)}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'text-xs font-semibold cursor-pointer')}>
+                Cancel
+              </button>
+              <button onClick={handleEditSubmit}
+                className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 text-xs font-semibold cursor-pointer')}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

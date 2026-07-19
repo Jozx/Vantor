@@ -55,6 +55,7 @@ export interface SecurityTransaction {
   price: number;
   commission: number;
   occurred_at: string; // ISO datetime
+  created_at?: string; // audit timestamp (DB-managed)
 }
 
 /** Cash ledger entry – covers all account types. */
@@ -70,6 +71,7 @@ export interface CashTransaction {
   related_security_transaction_id: number | null;
   /** Links paired transfers: credit card payment↔withdrawal, or account-to-account transfers. */
   linked_transaction_id?: number | null;
+  created_at?: string; // audit timestamp (DB-managed)
 }
 
 export interface Tag {

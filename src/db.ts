@@ -152,13 +152,19 @@ export async function getDb(): Promise<SQLiteDBConnection> {
       }
     }
 
-    dbInstance = await sqliteConnection.createConnection(
-      dbName,
-      encrypted,
-      mode,
-      1, // schema version (Capacitor layer – our own versioning uses PRAGMA user_version)
-      false, // readonly
-    );
+    try {
+      dbInstance = await sqliteConnection.createConnection(
+        dbName,
+        encrypted,
+        mode,
+        1, // schema version (Capacitor layer – our own versioning uses PRAGMA user_version)
+        false, // readonly
+      );
+    } catch {
+      // Plugin may already hold the connection internally even though
+      // isConnection() returned false (e.g. after background/foreground).
+      dbInstance = await sqliteConnection.retrieveConnection(dbName, false);
+    }
   }
 
   if (!dbInstance) {

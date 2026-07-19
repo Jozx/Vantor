@@ -26,7 +26,7 @@ export class NetWorthSnapshotRepo {
    * Insert or replace the snapshot for a given date.
    * Uses UPSERT so callers can call this idempotently during daily recalculation.
    */
-  async upsertByDate(data: Omit<NetWorthSnapshot, 'id'>): Promise<number> {
+  async upsertByDate(data: Omit<NetWorthSnapshot, 'id'>, transaction = true): Promise<number> {
     const result = await this.db.run(
       `INSERT INTO net_worth_snapshots
          (total_pyg, total_usd, breakdown_json, snapshot_date)
@@ -36,6 +36,7 @@ export class NetWorthSnapshotRepo {
          total_usd      = excluded.total_usd,
          breakdown_json = excluded.breakdown_json`,
       [data.total_pyg, data.total_usd, data.breakdown_json, data.snapshot_date],
+      transaction,
     );
     return result.changes?.lastId ?? 0;
   }
