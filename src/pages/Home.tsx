@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getAccounts, getCashBalanceBatch, computeNetWorth } from '@/services/financeService';
+import { getAccounts, getCashBalanceBatch, computeNetWorth, type AccountWithBalance } from '@/services/financeService';
 import type { NetWorthResult } from '@/services/financeService';
 import {
   getNetWorthHistory,
@@ -44,10 +44,6 @@ import {
   PiggyBank,
   Receipt,
 } from 'lucide-react';
-
-interface AccountWithBalance extends Account {
-  balance: number;
-}
 
 type ChartRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
@@ -132,11 +128,18 @@ export default function Home() {
 
   // Refetch chart data when a new snapshot is created (fixes race on first load)
   useEffect(() => {
-    const handleSnapshot = () => {
+    const handleSnapshot = async () => {
       const monthsMap: Record<ChartRange, number> = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12, 'ALL': 60 };
-      getNetWorthHistory(monthsMap[chartRange]).then((history) => {
+      try {
+        const [history, nw] = await Promise.all([
+          getNetWorthHistory(monthsMap[chartRange]),
+          computeNetWorth(),
+        ]);
         setChartData(history);
-      }).catch(console.error);
+        setNetWorth(nw);
+      } catch (err) {
+        console.error('Failed to refresh after snapshot:', err);
+      }
     };
     window.addEventListener('networth-snapshot-created', handleSnapshot);
     return () => window.removeEventListener('networth-snapshot-created', handleSnapshot);

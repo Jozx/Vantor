@@ -27,6 +27,7 @@ let dbPendingPromise: Promise<SQLiteDBConnection> | null = null;
 // regardless of how many callers invoke withTransaction concurrently.
 
 let txQueue: Promise<unknown> = Promise.resolve();
+let webVisibilityBound = false;
 
 /**
  * Serialize a database write through a single-promise-chain queue.
@@ -44,6 +45,7 @@ export function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
     try {
       const result = await fn();
       await db.commitTransaction();
+      await saveDb();
       return result;
     } catch (e) {
       try {
@@ -71,7 +73,7 @@ function generatePassphrase(): string {
 }
 
 /**
- * Return (or lazily open) the singleton SQLite connection for `vantor.db`.
+ * Return (or lazily open) the singleton SQLite connection for `finance`.
  *
  * On the very first call the connection is opened and `runMigrations()` is
  * executed, which creates all tables and seeds reference data exactly once
@@ -118,7 +120,7 @@ export async function getDb(): Promise<SQLiteDBConnection> {
     await sqliteConnection.initWebStore();
   }
 
-  const dbName = 'finance.db';
+  const dbName = 'finance';
 
   const isConn = await sqliteConnection.isConnection(dbName, false);
   if (isConn.result) {
@@ -168,10 +170,20 @@ export async function getDb(): Promise<SQLiteDBConnection> {
   }
 
   if (!dbInstance) {
-    throw new Error('Failed to create SQLite connection for vantor.db');
+    throw new Error('Failed to create SQLite connection for finance');
   }
 
   await dbInstance.open();
+
+  // On web, flush the in-memory DB to IndexedDB when the tab goes to background.
+  if (platform === 'web' && !webVisibilityBound) {
+    webVisibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        saveDb();
+      }
+    });
+  }
 
   // Run pending migrations (no-op after the first successful run).
   await runMigrations(dbInstance);
@@ -184,6 +196,21 @@ export async function getDb(): Promise<SQLiteDBConnection> {
     return result;
   } finally {
     dbPendingPromise = null;
+  }
+}
+
+/**
+ * Persist the in-memory SQLite database to IndexedDB on web.
+ * jeep-sqlite holds the DB in memory; without an explicit save, data is
+ * lost on page refresh.  Native platforms persist automatically.
+ */
+export async function saveDb(): Promise<void> {
+  if (Capacitor.getPlatform() !== 'web') return;
+  if (!sqliteConnection) return;
+  try {
+    await sqliteConnection.saveToStore('finance');
+  } catch (err) {
+    console.error('[db] saveToStore failed:', err);
   }
 }
 

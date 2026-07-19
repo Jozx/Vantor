@@ -8,7 +8,7 @@ import {
   getCashBalanceBatch,
   getHoldingsWithStats,
 } from '@/services/financeService';
-import type { HoldingWithStats } from '@/services/financeService';
+import type { HoldingWithStats, AccountWithBalance } from '@/services/financeService';
 import type { Account, AccountType, Currency } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
 import { cn, formatMoney, accountTypeConfig, todayISO } from '@/lib/utils';
@@ -25,10 +25,6 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-
-interface AccountWithBalance extends Account {
-  balance: number;
-}
 
 type AccountsProps = {
   filterType?: AccountType | AccountType[];

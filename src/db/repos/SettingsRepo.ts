@@ -1,5 +1,6 @@
 import type { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import type { Settings } from '../types';
+import { encryptValue, decryptValue } from '@/lib/crypto';
 
 /**
  * Typed read + update operations for the `settings` table.
@@ -31,7 +32,11 @@ export class SettingsRepo {
         'Settings row is missing – ensure runMigrations() was called before getDb().',
       );
     }
-    return row;
+    return {
+      ...row,
+      stock_api_key: await decryptValue(row.stock_api_key),
+      fx_api_key: await decryptValue(row.fx_api_key),
+    };
   }
 
   // ── Write ─────────────────────────────────────────────────────────────────
@@ -46,8 +51,16 @@ export class SettingsRepo {
   async update(data: Partial<Omit<Settings, 'id'>>): Promise<void> {
     const entries = Object.entries(data).filter(([col, v]) => v !== undefined && SettingsRepo.VALID_COLUMNS.has(col));
     if (entries.length === 0) return;
-    const setClause = entries.map(([col]) => `${col} = ?`).join(', ');
-    const values = [...entries.map(([, v]) => v)];
+    const encrypted = await Promise.all(
+      entries.map(async ([col, v]) => {
+        if ((col === 'stock_api_key' || col === 'fx_api_key') && typeof v === 'string') {
+          return [col, await encryptValue(v)] as const;
+        }
+        return [col, v] as const;
+      }),
+    );
+    const setClause = encrypted.map(([col]) => `${col} = ?`).join(', ');
+    const values = encrypted.map(([, v]) => v);
     await this.db.run(
       `UPDATE settings SET ${setClause} WHERE id = 1`,
       values,
@@ -57,11 +70,11 @@ export class SettingsRepo {
   // ── Typed field helpers ───────────────────────────────────────────────────
 
   async setStockApiKey(key: string): Promise<void> {
-    await this.db.run('UPDATE settings SET stock_api_key = ? WHERE id = 1', [key]);
+    await this.db.run('UPDATE settings SET stock_api_key = ? WHERE id = 1', [await encryptValue(key)]);
   }
 
   async setFxApiKey(key: string): Promise<void> {
-    await this.db.run('UPDATE settings SET fx_api_key = ? WHERE id = 1', [key]);
+    await this.db.run('UPDATE settings SET fx_api_key = ? WHERE id = 1', [await encryptValue(key)]);
   }
 
   async setBaseCurrency(currency: Settings['base_currency']): Promise<void> {

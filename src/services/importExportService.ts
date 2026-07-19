@@ -269,7 +269,7 @@ export async function commitImport(zipBlob: Blob): Promise<ImportResult> {
       // 3. Delete all existing data (reverse FK order)
       const deleteOrder = [...TABLE_ORDER].reverse();
       for (const tableName of deleteOrder) {
-        await db.execute(`DELETE FROM ${tableName}`);
+        await db.execute(`DELETE FROM ${tableName}`, false);
       }
 
       // 4. Insert imported data with explicit IDs

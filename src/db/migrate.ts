@@ -1,8 +1,9 @@
 import type { SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { encryptValue } from '@/lib/crypto';
 
 // ─── Version tracking ─────────────────────────────────────────────────────────
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 // ─── DDL – tables are ordered so FK dependencies are always satisfied ─────────
 
@@ -313,5 +314,17 @@ export async function runMigrations(db: SQLiteDBConnection): Promise<void> {
     await db.execute("UPDATE cash_transactions SET created_at = occurred_at WHERE created_at = ''");
     await db.execute("UPDATE security_transactions SET created_at = occurred_at WHERE created_at = ''");
     await db.execute('PRAGMA user_version = 7;');
+  }
+
+  // ── v7 → v8 : encrypt plaintext API keys in settings ──────────────────────
+  if (currentVersion < 8) {
+    const result = await db.query('SELECT stock_api_key, fx_api_key FROM settings WHERE id = 1');
+    const row = result.values?.[0] as { stock_api_key: string; fx_api_key: string } | undefined;
+    if (row) {
+      const encStock = row.stock_api_key ? await encryptValue(row.stock_api_key) : '';
+      const encFx = row.fx_api_key ? await encryptValue(row.fx_api_key) : '';
+      await db.run('UPDATE settings SET stock_api_key = ?, fx_api_key = ? WHERE id = 1', [encStock, encFx]);
+    }
+    await db.execute('PRAGMA user_version = 8;');
   }
 }

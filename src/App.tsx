@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
+import type { PluginListenerHandle } from '@capacitor/core';
 import Home from '@/pages/Home';
 import Health from '@/pages/Health';
 import Accounts from '@/pages/Accounts';
@@ -293,10 +294,51 @@ function NetWorthSnapshotRunner() {
   return null;
 }
 
+/**
+ * Intercepts Android back-button / gesture.
+ * If on dashboard → let default behaviour exit the app.
+ * Otherwise → navigate to dashboard.
+ */
+function BackButtonHandler() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathRef = useRef(location.pathname);
+
+  useEffect(() => {
+    pathRef.current = location.pathname;
+  }, [location.pathname]);
+
+  useEffect(() => {
+    let handler: PluginListenerHandle | undefined;
+
+    (async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+        handler = await App.addListener('backButton', ({ canGoBack }) => {
+          if (pathRef.current === '/') {
+            if (!canGoBack) App.exitApp();
+          } else {
+            navigate('/');
+          }
+        });
+      } catch {
+        // Not running in Capacitor (browser dev) — ignore
+      }
+    })();
+
+    return () => {
+      handler?.remove();
+    };
+  }, [navigate]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <Router>
+        <BackButtonHandler />
         <AccrualRunner />
         <MarketDataRunner />
         <NetWorthSnapshotRunner />

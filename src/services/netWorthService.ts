@@ -102,22 +102,3 @@ export async function getNetWorthHistory(
     }))
     .reverse();
 }
-
-// ─── Get Latest Snapshot ─────────────────────────────────────────────────────
-
-export async function getLatestSnapshot(): Promise<{
-  date: string;
-  pyg: number;
-  usd: number;
-} | null> {
-  const repos = await getRepos();
-  const snapshot = await repos.netWorthSnapshots.latest();
-
-  if (!snapshot) return null;
-
-  return {
-    date: snapshot.snapshot_date,
-    pyg: snapshot.total_pyg,
-    usd: snapshot.total_usd,
-  };
-}

@@ -213,16 +213,6 @@ export async function getMarketDataStatus(): Promise<MarketDataStatus> {
   };
 }
 
-// ─── Get FX Rate ─────────────────────────────────────────────────────────────
-
-export async function getFxRate(from: string, to: string): Promise<number> {
-  if (from === to) return 1;
-
-  const repos = await getRepos();
-  const rate = await repos.marketData.latestFxRate(from, to);
-  return rate?.rate ?? 1;
-}
-
 // ─── Get Security Price ──────────────────────────────────────────────────────
 
 export async function getSecurityPrice(symbol: string): Promise<number | null> {

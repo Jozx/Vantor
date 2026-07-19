@@ -68,6 +68,9 @@ export default function SettingsPage() {
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
+
+      // Auto-refresh market data after saving (clears throttle so it runs immediately)
+      handleRefresh();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
