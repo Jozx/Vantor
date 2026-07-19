@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getAccounts, getCashBalance, computeNetWorth } from '@/services/financeService';
+import { getAccounts, getCashBalanceBatch, computeNetWorth } from '@/services/financeService';
 import type { NetWorthResult } from '@/services/financeService';
 import {
   getNetWorthHistory,
@@ -81,13 +81,9 @@ export default function Home() {
       try {
         const data = await getAccounts();
         if (cancelled) return;
-        const withBalances = await Promise.all(
-          data.map(async (acc) => {
-            const balance = await getCashBalance(acc.id);
-            return { ...acc, balance };
-          })
-        );
-          if (cancelled) return;
+        const balances = await getCashBalanceBatch(data.map((a) => a.id));
+        if (cancelled) return;
+        const withBalances = data.map((acc) => ({ ...acc, balance: balances.get(acc.id) ?? 0 }));
         setAccounts(withBalances);
         const nw = await computeNetWorth();
         if (cancelled) return;
@@ -441,10 +437,16 @@ export default function Home() {
           const Icon = cfg.icon;
           const count = accounts.filter((a) => a.type === type).length;
           const total = totalByType(type);
+          const typeRouteMap: Record<Account['type'], string> = {
+            bank: '/accounts',
+            broker: '/investments',
+            mutual_fund: '/investments',
+            credit_card: '/credit-cards',
+          };
           return (
             <Link
               key={type}
-              to="/accounts"
+              to={typeRouteMap[type]}
               className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-5 shadow-xs hover:shadow-md transition-all duration-200 group"
             >
               <div className="flex items-center gap-3 mb-3">
@@ -639,12 +641,8 @@ export default function Home() {
           (async () => {
             try {
               const data = await getAccounts();
-              const withBalances = await Promise.all(
-                data.map(async (acc) => {
-                  const balance = await getCashBalance(acc.id);
-                  return { ...acc, balance };
-                })
-              );
+              const balances = await getCashBalanceBatch(data.map((a) => a.id));
+              const withBalances = data.map((acc) => ({ ...acc, balance: balances.get(acc.id) ?? 0 }));
               setAccounts(withBalances);
               const nw = await computeNetWorth();
               setNetWorth(nw);

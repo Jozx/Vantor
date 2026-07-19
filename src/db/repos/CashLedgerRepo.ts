@@ -63,6 +63,44 @@ export class CashLedgerRepo {
     return (result.values?.[0] as CashTransaction | undefined);
   }
 
+  /**
+   * Batch-fetch running balances for multiple accounts in a single query.
+   * Returns a Map<accountId, balance>.
+   */
+  async runningBalanceBatch(accountIds: number[]): Promise<Map<number, number>> {
+    if (accountIds.length === 0) return new Map();
+    const placeholders = accountIds.map(() => '?').join(', ');
+    const result = await this.db.query(
+      `SELECT
+         a.id AS account_id,
+         a.opening_balance +
+         COALESCE(SUM(
+           CASE ct.type
+             WHEN 'income'            THEN  ct.amount
+             WHEN 'deposit'           THEN  ct.amount
+             WHEN 'interest_accrual'  THEN  ct.amount
+             WHEN 'sell_credit'       THEN  ct.amount
+             WHEN 'payment'           THEN  ct.amount
+             WHEN 'expense'           THEN -ct.amount
+             WHEN 'withdrawal'        THEN -ct.amount
+             WHEN 'buy_debit'         THEN -ct.amount
+             WHEN 'charge'            THEN -ct.amount
+             ELSE 0
+           END
+         ), 0) AS balance
+         FROM accounts a
+         LEFT JOIN cash_transactions ct ON ct.account_id = a.id
+        WHERE a.id IN (${placeholders})
+        GROUP BY a.id`,
+      accountIds,
+    );
+    const map = new Map<number, number>();
+    for (const row of (result.values ?? []) as Array<{ account_id: number; balance: number }>) {
+      map.set(row.account_id, row.balance ?? 0);
+    }
+    return map;
+  }
+
   async findAll(opts?: DateRangeOpts): Promise<CashTransaction[]> {
     const { sql, params } = buildFilter(
       'SELECT * FROM cash_transactions',

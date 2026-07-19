@@ -5,7 +5,7 @@ import {
   createAccount,
   updateAccount,
   deleteAccount,
-  getCashBalance,
+  getCashBalanceBatch,
 } from '@/services/financeService';
 import type { Account, AccountType, Currency } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
@@ -58,16 +58,12 @@ export default function Accounts({ filterType }: AccountsProps) {
   const [openingDate, setOpeningDate] = useState(new Date().toISOString().split('T')[0]);
   const [yieldRate, setYieldRate] = useState('');
   const [creditLimit, setCreditLimit] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchAccounts = async () => {
     const data = await getAccounts();
-    const accountsWithBalances = await Promise.all(
-      data.map(async (acc) => {
-        const balance = await getCashBalance(acc.id);
-        return { ...acc, balance };
-      })
-    );
-    return accountsWithBalances;
+    const balances = await getCashBalanceBatch(data.map((a) => a.id));
+    return data.map((acc) => ({ ...acc, balance: balances.get(acc.id) ?? 0 }));
   };
 
   const loadData = async () => {
@@ -178,6 +174,7 @@ export default function Accounts({ filterType }: AccountsProps) {
       }
     }
 
+    setIsSubmitting(true);
     try {
       const accountData = {
         name: name.trim(),
@@ -202,6 +199,8 @@ export default function Accounts({ filterType }: AccountsProps) {
     } catch (err: unknown) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'Failed to save account');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -481,7 +480,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as AccountType)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   >
                     <option value="bank">Bank Account</option>
                     <option value="broker">Brokerage</option>
@@ -496,7 +495,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value as Currency)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   >
                     <option value="USD">USD ($)</option>
                     <option value="PYG">PYG (Gs.)</option>
@@ -513,7 +512,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                   placeholder="e.g. Chase Bank, Itau"
                   value={institution}
                   onChange={(e) => setInstitution(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                 />
               </div>
 
@@ -528,7 +527,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                     required
                     value={openingBalance}
                     onChange={(e) => setOpeningBalance(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   />
                 </div>
                 <div>
@@ -540,7 +539,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                     required
                     value={openingDate}
                     onChange={(e) => setOpeningDate(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   />
                 </div>
               </div>
@@ -556,7 +555,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                     placeholder="e.g. 5.25"
                     value={yieldRate}
                     onChange={(e) => setYieldRate(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   />
                 </div>
               )}
@@ -572,7 +571,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                     placeholder="e.g. 10000000"
                     value={creditLimit}
                     onChange={(e) => setCreditLimit(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3.5 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   />
                 </div>
               )}
@@ -587,12 +586,14 @@ export default function Accounts({ filterType }: AccountsProps) {
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className={cn(
                     buttonVariants({ variant: 'default' }),
-                    'bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer'
+                    'bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer',
+                    isSubmitting && 'opacity-50 cursor-not-allowed'
                   )}
                 >
-                  {editId !== null ? 'Save Changes' : 'Create'}
+                  {isSubmitting ? 'Saving...' : (editId !== null ? 'Save Changes' : 'Create')}
                 </button>
               </div>
             </form>

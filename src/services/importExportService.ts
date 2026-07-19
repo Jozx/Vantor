@@ -88,6 +88,13 @@ const TABLE_ORDER = [
   'net_worth_snapshots',
 ];
 
+/** Columns that should be coerced to numbers during import. */
+const NUMERIC_COLUMNS = new Set([
+  'amount', 'quantity', 'price', 'commission',
+  'opening_balance', 'yield_rate', 'credit_limit',
+  'rate', 'total_pyg', 'total_usd', 'is_custom',
+]);
+
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 /**
@@ -273,6 +280,13 @@ export async function commitImport(zipBlob: Blob): Promise<ImportResult> {
         if (tableName === 'settings') {
           row.stock_api_key = '';
           row.fx_api_key = '';
+        }
+        // Coerce numeric columns from strings to numbers
+        for (const key of Object.keys(row)) {
+          if (NUMERIC_COLUMNS.has(key) && typeof row[key] === 'string') {
+            const num = Number(row[key]);
+            if (!isNaN(num)) row[key] = num;
+          }
         }
         const values = config.insertSql.match(/\?/g)!.map((_, i) => {
           const col = config.columns[i];

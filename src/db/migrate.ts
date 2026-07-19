@@ -297,4 +297,12 @@ export async function runMigrations(db: SQLiteDBConnection): Promise<void> {
     await db.execute("ALTER TABLE settings ADD COLUMN theme TEXT NOT NULL DEFAULT 'system' CHECK(theme IN ('light', 'dark', 'system'))");
     await db.execute('PRAGMA user_version = 5;');
   }
+
+  // ── v5 → v6 : add missing performance indexes ──────────────────────────────
+  if (currentVersion < 6) {
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_security_transactions_occurred ON security_transactions(occurred_at);');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_cash_transactions_type ON cash_transactions(type);');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(type);');
+    await db.execute('PRAGMA user_version = 6;');
+  }
 }

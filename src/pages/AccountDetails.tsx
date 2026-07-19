@@ -58,6 +58,7 @@ export default function AccountDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Broker Form State (Buy/Sell)
   const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy');
@@ -122,6 +123,19 @@ export default function AccountDetails() {
 
         const st = await getSecurityTransactions(accountId);
         setSecurityTransactions(st);
+
+        const settings = await getSettings();
+        setHasApiKey(!!settings.stock_api_key);
+
+        const prices = new Map<string, number>();
+        for (const holding of h) {
+          if (holding.quantity <= 0) continue;
+          const price = await getSecurityPrice(holding.symbol);
+          if (price !== null) {
+            prices.set(holding.symbol, price);
+          }
+        }
+        setMarketPrices(prices);
       } else if (acc.type === 'credit_card') {
         // Load bank accounts for payment form
         const allAccounts = await getAccounts();
@@ -236,6 +250,7 @@ export default function AccountDetails() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       if (tradeType === 'buy') {
         await buySecurity(
@@ -270,6 +285,8 @@ export default function AccountDetails() {
     } catch (err: unknown) {
       console.error(err);
       setFormError(err instanceof Error ? err.message : 'Trade execution failed');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -309,6 +326,7 @@ export default function AccountDetails() {
       }
     }
 
+    setIsSubmitting(true);
     try {
       await addCashTransaction({
         account_id: accountId,
@@ -329,6 +347,8 @@ export default function AccountDetails() {
     } catch (err: unknown) {
       console.error(err);
       setFormError(err instanceof Error ? err.message : 'Failed to add cash entry');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -380,6 +400,7 @@ export default function AccountDetails() {
       }
     }
 
+    setIsSubmitting(true);
     try {
       await chargeCreditCard(
         accountId,
@@ -395,6 +416,8 @@ export default function AccountDetails() {
       await loadData();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Failed to record charge');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -413,6 +436,7 @@ export default function AccountDetails() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await payCreditCard(payFromAccountId, accountId, payAmount, payDate);
       setPayAmount(0);
@@ -420,6 +444,8 @@ export default function AccountDetails() {
       await loadData();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Failed to record payment');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -589,7 +615,7 @@ export default function AccountDetails() {
                     <select
                       value={tradeMarket}
                       onChange={(e) => setTradeMarket(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     >
                       <option value="US">US (NYSE/NASDAQ)</option>
                     </select>
@@ -653,18 +679,20 @@ export default function AccountDetails() {
                     placeholder="Optional description"
                     value={tradeDesc}
                     onChange={(e) => setTradeDesc(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   />
                 </div>
 
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className={cn(
                     buttonVariants({ variant: 'default' }),
-                    'w-full bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer text-xs font-bold py-2.5 shadow-sm'
+                    'w-full bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer text-xs font-bold py-2.5 shadow-sm',
+                    isSubmitting && 'opacity-50 cursor-not-allowed'
                   )}
                 >
-                  Record Trade
+                  {isSubmitting ? 'Saving...' : 'Record Trade'}
                 </button>
               </form>
             </div>
@@ -733,7 +761,7 @@ export default function AccountDetails() {
                           setChargeTagId(e.target.value ? Number(e.target.value) : null);
                         }
                       }}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     >
                       <option value="">Select a tag...</option>
                       {tags.map((tag) => (
@@ -749,7 +777,7 @@ export default function AccountDetails() {
                         placeholder="Enter tag name..."
                         value={chargeCustomTag}
                         onChange={(e) => setChargeCustomTag(e.target.value)}
-                        className="w-full mt-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                        className="w-full mt-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                       />
                     )}
                   </div>
@@ -763,18 +791,20 @@ export default function AccountDetails() {
                       placeholder="e.g. Supermarket purchase"
                       value={chargeDesc}
                       onChange={(e) => setChargeDesc(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     />
                   </div>
 
                   <button
                     type="submit"
+                    disabled={isSubmitting}
                     className={cn(
                       buttonVariants({ variant: 'default' }),
-                      'w-full bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer text-xs font-bold py-2.5 shadow-sm'
+                      'w-full bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer text-xs font-bold py-2.5 shadow-sm',
+                      isSubmitting && 'opacity-50 cursor-not-allowed'
                     )}
                   >
-                    Record Charge
+                    {isSubmitting ? 'Saving...' : 'Record Charge'}
                   </button>
                 </form>
               </div>
@@ -794,7 +824,7 @@ export default function AccountDetails() {
                     <select
                       value={payFromAccountId ?? ''}
                       onChange={(e) => setPayFromAccountId(Number(e.target.value) || null)}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     >
                       <option value="">Select bank account...</option>
                       {bankAccounts.map((a) => (
@@ -833,12 +863,14 @@ export default function AccountDetails() {
 
                   <button
                     type="submit"
+                    disabled={isSubmitting}
                     className={cn(
                       buttonVariants({ variant: 'default' }),
-                      'w-full bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer text-xs font-bold py-2.5 shadow-sm'
+                      'w-full bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer text-xs font-bold py-2.5 shadow-sm',
+                      isSubmitting && 'opacity-50 cursor-not-allowed'
                     )}
                   >
-                    Make Payment
+                    {isSubmitting ? 'Saving...' : 'Make Payment'}
                   </button>
                 </form>
               </div>
@@ -866,7 +898,7 @@ export default function AccountDetails() {
                   <select
                     value={cashType}
                     onChange={(e) => setCashType(e.target.value as CashTransactionType)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   >
                     {isCreditCard ? (
                       <>
@@ -908,7 +940,7 @@ export default function AccountDetails() {
                       required
                       value={cashDate}
                       onChange={(e) => setCashDate(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     />
                   </div>
                 </div>
@@ -923,7 +955,7 @@ export default function AccountDetails() {
                     placeholder={isCreditCard ? 'e.g. Supermarket purchase' : 'Details about the transaction'}
                     value={cashDesc}
                     onChange={(e) => setCashDesc(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   />
                 </div>
 
@@ -941,7 +973,7 @@ export default function AccountDetails() {
                         setCashTagId(e.target.value ? Number(e.target.value) : null);
                       }
                     }}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   >
                     <option value="">No tag</option>
                     {tags.map((tag) => (
@@ -957,19 +989,21 @@ export default function AccountDetails() {
                       placeholder="Enter tag name..."
                       value={customTagName}
                       onChange={(e) => setCustomTagName(e.target.value)}
-                      className="w-full mt-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+                      className="w-full mt-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     />
                   )}
                 </div>
 
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className={cn(
                     buttonVariants({ variant: 'default' }),
-                    'w-full bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer text-xs font-bold py-2.5 shadow-sm'
+                    'w-full bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer text-xs font-bold py-2.5 shadow-sm',
+                    isSubmitting && 'opacity-50 cursor-not-allowed'
                   )}
                 >
-                  {isCreditCard ? 'Record Charge' : 'Record Entry'}
+                  {isSubmitting ? 'Saving...' : (isCreditCard ? 'Record Charge' : 'Record Entry')}
                 </button>
               </form>
             </div>

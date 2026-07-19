@@ -3,22 +3,16 @@ import type { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { Capacitor } from '@capacitor/core';
 import { runMigrations } from './db/migrate';
 import { createRepos } from './db/index';
-export type { Repos } from './db/index';
 export type {
   AccountType,
   Currency,
-  SecurityTransactionType,
   CashTransactionType,
   Account,
   Holding,
   SecurityTransaction,
   CashTransaction,
   Tag,
-  FxRate,
-  SecurityPrice,
-  NetWorthSnapshot,
   Settings,
-  DateRangeOpts,
 } from './db/types';
 
 let dbInstance: SQLiteDBConnection | null = null;

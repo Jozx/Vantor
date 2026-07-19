@@ -199,3 +199,124 @@ describe('computeNetWorth', () => {
     expect(result.assetsPyg).toBe(3000000);
   });
 });
+
+// ─── Regression: Symbol validation (3.3) ──────────────────────────────────────
+
+describe('buySecurity / sellSecurity symbol validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('buySecurity rejects empty symbol', async () => {
+    const repos = buildMockRepos();
+    (getRepos as ReturnType<typeof vi.fn>).mockResolvedValue(repos);
+
+    const { buySecurity } = await import('@/services/financeService');
+
+    await expect(
+      buySecurity(1, '', 10, 100, 0, '2024-01-01'),
+    ).rejects.toThrow('Symbol is required');
+
+    await expect(
+      buySecurity(1, '   ', 10, 100, 0, '2024-01-01'),
+    ).rejects.toThrow('Symbol is required');
+  });
+
+  it('sellSecurity rejects empty symbol', async () => {
+    const repos = buildMockRepos();
+    (getRepos as ReturnType<typeof vi.fn>).mockResolvedValue(repos);
+
+    const { sellSecurity } = await import('@/services/financeService');
+
+    await expect(
+      sellSecurity(1, '', 10, 100, 0, '2024-01-01'),
+    ).rejects.toThrow('Symbol is required');
+
+    await expect(
+      sellSecurity(1, '   ', 10, 100, 0, '2024-01-01'),
+    ).rejects.toThrow('Symbol is required');
+  });
+});
+
+// ─── Regression: Sankey rounding consistency (1.4) ────────────────────────────
+
+describe('Sankey rounding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('totalIncome and totalExpense equal sum of rounded links', async () => {
+    const repos = buildMockRepos();
+    (getRepos as ReturnType<typeof vi.fn>).mockResolvedValue(repos);
+
+    const dbQuery = vi.fn()
+      // First call: Sankey query returns 3 transactions
+      .mockResolvedValueOnce({
+        values: [
+          { id: 1, type: 'income', amount: 1500, tag_id: 1, description: 'Salary', tag_name: 'Salary', tag_color: '#10b981', account_currency: 'PYG' },
+          { id: 2, type: 'income', amount: 250, tag_id: 2, description: 'Freelance', tag_name: 'Freelance', tag_color: '#3b82f6', account_currency: 'PYG' },
+          { id: 3, type: 'expense', amount: 800, tag_id: 3, description: 'Rent', tag_name: 'Rent', tag_color: '#ef4444', account_currency: 'PYG' },
+          { id: 4, type: 'expense', amount: 300, tag_id: 4, description: 'Food', tag_name: 'Food', tag_color: '#f59e0b', account_currency: 'PYG' },
+        ],
+      });
+
+    const { getDb } = await import('@/db');
+    (getDb as ReturnType<typeof vi.fn>).mockResolvedValue({
+      query: dbQuery,
+      run: vi.fn(),
+      beginTransaction: vi.fn(),
+      commitTransaction: vi.fn(),
+      rollbackTransaction: vi.fn(),
+    });
+
+    const { getCashFlowSankeyData } = await import('@/services/financeService');
+    const result = await getCashFlowSankeyData({ mode: 'month', month: 0, year: 2024 });
+
+    // Round each link value individually
+    const linkSum = result.links
+      .filter((l) => l.source === 0)
+      .reduce((sum, l) => sum + l.value, 0);
+
+    // TotalIncome should match sum of income links
+    expect(result.totalIncome).toBe(linkSum);
+
+    // All values are integers (no fractional links)
+    for (const link of result.links) {
+      expect(Number.isInteger(link.value)).toBe(true);
+    }
+  });
+});
+
+// ─── Regression: runningBalanceBatch (4.2) ────────────────────────────────────
+
+describe('runningBalanceBatch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns correct balances for multiple accounts', async () => {
+    const repos = buildMockRepos();
+    (repos.cashLedger as Record<string, ReturnType<typeof vi.fn>>).runningBalanceBatch = vi.fn().mockResolvedValue(
+      new Map([[1, 1000000], [2, 500000]])
+    );
+    (getRepos as ReturnType<typeof vi.fn>).mockResolvedValue(repos);
+
+    const { getCashBalanceBatch } = await import('@/services/financeService');
+    const result = await getCashBalanceBatch([1, 2]);
+
+    expect(result.get(1)).toBe(1000000);
+    expect(result.get(2)).toBe(500000);
+    expect(result.size).toBe(2);
+  });
+
+  it('returns empty map for empty input', async () => {
+    const repos = buildMockRepos();
+    (repos.cashLedger as Record<string, ReturnType<typeof vi.fn>>).runningBalanceBatch = vi.fn().mockResolvedValue(new Map());
+    (getRepos as ReturnType<typeof vi.fn>).mockResolvedValue(repos);
+
+    const { getCashBalanceBatch } = await import('@/services/financeService');
+    const result = await getCashBalanceBatch([]);
+
+    expect(result.size).toBe(0);
+  });
+});

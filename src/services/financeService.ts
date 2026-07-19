@@ -50,6 +50,11 @@ export async function getCashBalance(accountId: number): Promise<number> {
   return repos.cashLedger.runningBalance(accountId);
 }
 
+export async function getCashBalanceBatch(accountIds: number[]): Promise<Map<number, number>> {
+  const repos = await getRepos();
+  return repos.cashLedger.runningBalanceBatch(accountIds);
+}
+
 export async function getCashTransactions(accountId: number): Promise<CashTransaction[]> {
   const repos = await getRepos();
   return repos.cashLedger.findByAccountId(accountId);
@@ -115,6 +120,7 @@ export async function buySecurity(
   const repos = await getRepos();
   const db = await getDb();
 
+  if (!symbol || symbol.trim().length === 0) throw new Error('Symbol is required');
   if (quantity <= 0) throw new Error('Quantity must be greater than zero');
   if (price <= 0) throw new Error('Price must be greater than zero');
   if (commission < 0) throw new Error('Commission cannot be negative');
@@ -503,7 +509,7 @@ export async function runAccrualEngine(): Promise<void> {
       await db.commitTransaction();
     } catch (e) {
       await db.rollbackTransaction();
-      console.error(`Accrual engine failed for account ${fund.id}:`, e);
+      throw new Error(`Accrual engine failed for account "${fund.name}": ${e instanceof Error ? e.message : String(e)}`, { cause: e });
     }
   }
 }
@@ -667,12 +673,18 @@ export async function getCashFlowSankeyData(
   const incomeByTag = new Map<string, { total: number; color: string }>();
   const expenseByTag = new Map<string, { total: number; color: string }>();
 
+  // Batch-fetch all unique FX rates before the loop (fixes N+1)
+  const uniqueCurrencies = new Set(rows.map((r) => r.account_currency));
+  const fxRateCache = new Map<string, number>();
+  await Promise.all(
+    [...uniqueCurrencies].map(async (curr) => {
+      const rate = await getFxConversion(repos, curr, baseCurrency);
+      fxRateCache.set(curr, rate);
+    }),
+  );
+
   for (const row of rows) {
-    const conversion = await getFxConversion(
-      repos,
-      row.account_currency,
-      baseCurrency,
-    );
+    const conversion = fxRateCache.get(row.account_currency) ?? 1;
     const converted = row.amount * conversion;
     const isIncome = row.type === 'income';
     const map = isIncome ? incomeByTag : expenseByTag;
@@ -689,11 +701,6 @@ export async function getCashFlowSankeyData(
     }
   }
 
-  let totalIncome = 0;
-  for (const v of incomeByTag.values()) totalIncome += v.total;
-  let totalExpense = 0;
-  for (const v of expenseByTag.values()) totalExpense += v.total;
-
   // Build nodes: income tags (left) → Total Income (center) → expense tags + balance (right)
   const nodes: SankeyNode[] = [];
   const links: SankeyLink[] = [];
@@ -702,30 +709,34 @@ export async function getCashFlowSankeyData(
   const totalIncomeIdx = nodes.length;
   nodes.push({ name: 'Total Income', color: '#10b981' });
 
-  // Income tag nodes and links to centre
+  // Income tag nodes and links to centre (rounded)
+  let roundedIncomeSum = 0;
   for (const [name, { total, color }] of incomeByTag) {
     const idx = nodes.length;
+    const rounded = Math.round(total);
+    roundedIncomeSum += rounded;
     nodes.push({ name, color });
-    links.push({ source: idx, target: totalIncomeIdx, value: Math.round(total) });
+    links.push({ source: idx, target: totalIncomeIdx, value: rounded });
   }
 
-  // Expense tag nodes and links from centre
+  // Expense tag nodes and links from centre (rounded)
+  let roundedExpenseSum = 0;
   for (const [name, { total, color }] of expenseByTag) {
     const idx = nodes.length;
+    const rounded = Math.round(total);
+    roundedExpenseSum += rounded;
     nodes.push({ name, color });
-    links.push({ source: totalIncomeIdx, target: idx, value: Math.round(total) });
+    links.push({ source: totalIncomeIdx, target: idx, value: rounded });
   }
 
-  // Balancing node
-  const roundedIncome = Math.round(totalIncome);
-  const roundedExpense = Math.round(totalExpense);
-  if (roundedIncome >= roundedExpense) {
+  // Balancing node (uses sum of rounded links for consistency)
+  if (roundedIncomeSum >= roundedExpenseSum) {
     const savingsIdx = nodes.length;
     nodes.push({ name: 'Savings', color: '#3b82f6' });
     links.push({
       source: totalIncomeIdx,
       target: savingsIdx,
-      value: roundedIncome - roundedExpense,
+      value: roundedIncomeSum - roundedExpenseSum,
     });
   } else {
     const deficitIdx = nodes.length;
@@ -733,11 +744,11 @@ export async function getCashFlowSankeyData(
     links.push({
       source: deficitIdx,
       target: totalIncomeIdx,
-      value: roundedExpense - roundedIncome,
+      value: roundedExpenseSum - roundedIncomeSum,
     });
   }
 
-  return { nodes, links, totalIncome: roundedIncome, totalExpense: roundedExpense };
+  return { nodes, links, totalIncome: roundedIncomeSum, totalExpense: roundedExpenseSum };
 }
 
 // ─── Net Worth Computation ───────────────────────────────────────────────────
@@ -871,6 +882,7 @@ export async function sellSecurity(
   const repos = await getRepos();
   const db = await getDb();
 
+  if (!symbol || symbol.trim().length === 0) throw new Error('Symbol is required');
   if (quantity <= 0) throw new Error('Quantity must be greater than zero');
   if (price <= 0) throw new Error('Price must be greater than zero');
   if (commission < 0) throw new Error('Commission cannot be negative');

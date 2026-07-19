@@ -334,6 +334,11 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                   </option>
                 ))}
               </select>
+              {fromAccounts.length === 0 && (
+                <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">
+                  No matching accounts available. Create one first.
+                </p>
+              )}
               {selectedAccount && (
                 <p className="text-xs text-zinc-400 mt-1">
                   Balance: {new Intl.NumberFormat('es-PY', { style: 'currency', currency: selectedAccount.currency }).format(
@@ -361,6 +366,11 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                     </option>
                   ))}
                 </select>
+                {toAccounts.length === 0 && (
+                  <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">
+                    No matching accounts available. Create one first.
+                  </p>
+                )}
               </div>
             )}
 
