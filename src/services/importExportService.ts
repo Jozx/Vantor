@@ -1,4 +1,4 @@
-import { getRepos, getDb } from '@/db';
+import { getRepos, getDb, withTransaction } from '@/db';
 import { todayISO } from '@/lib/utils';
 import Papa from 'papaparse';
 import { zipSync, unzipSync } from 'fflate';
@@ -258,71 +258,67 @@ export async function commitImport(zipBlob: Blob): Promise<ImportResult> {
     manifest.totalRows += parsed.data.length;
   }
 
-  // 2. Disable FK enforcement and begin transaction
+  // 2. Disable FK enforcement for the import transaction
   await db.execute('PRAGMA foreign_keys = OFF');
-  await db.beginTransaction();
 
   try {
-    // 3. Delete all existing data (reverse FK order)
-    const deleteOrder = [...TABLE_ORDER].reverse();
-    for (const tableName of deleteOrder) {
-      await db.execute(`DELETE FROM ${tableName}`);
-    }
-
-    // 4. Insert imported data with explicit IDs
-    for (const tableName of TABLE_ORDER) {
-      const config = TABLES[tableName];
-      const rows = parsedTables[tableName] ?? [];
-      if (rows.length === 0) continue;
-
-      for (const row of rows) {
-        // For settings, always overwrite API keys with empty strings
-        // (they are stripped from exports and should not be imported)
-        if (tableName === 'settings') {
-          row.stock_api_key = '';
-          row.fx_api_key = '';
-        }
-        // Coerce numeric columns from strings to numbers
-        for (const key of Object.keys(row)) {
-          if (NUMERIC_COLUMNS.has(key) && typeof row[key] === 'string') {
-            const num = Number(row[key]);
-            if (!isNaN(num)) row[key] = num;
-          }
-        }
-        const values = config.insertSql.match(/\?/g)!.map((_, i) => {
-          const col = config.columns[i];
-          if (col === undefined) return null; // missing column in export, use default
-          const val = row[col];
-          if (val === '' || val === undefined || val === null) {
-            return null;
-          }
-          return val;
-        });
-        await db.run(config.insertSql, values, false);
+    await withTransaction(async () => {
+      // 3. Delete all existing data (reverse FK order)
+      const deleteOrder = [...TABLE_ORDER].reverse();
+      for (const tableName of deleteOrder) {
+        await db.execute(`DELETE FROM ${tableName}`);
       }
-    }
 
-    // 5. Reset AUTOINCREMENT sequences
-    for (const tableName of TABLE_ORDER) {
-      const rows = parsedTables[tableName] ?? [];
-      if (rows.length === 0) continue;
+      // 4. Insert imported data with explicit IDs
+      for (const tableName of TABLE_ORDER) {
+        const config = TABLES[tableName];
+        const rows = parsedTables[tableName] ?? [];
+        if (rows.length === 0) continue;
 
-      const maxId = Math.max(
-        ...rows.map((r) => Number(r.id) || 0),
-      );
+        for (const row of rows) {
+          // For settings, always overwrite API keys with empty strings
+          // (they are stripped from exports and should not be imported)
+          if (tableName === 'settings') {
+            row.stock_api_key = '';
+            row.fx_api_key = '';
+          }
+          // Coerce numeric columns from strings to numbers
+          for (const key of Object.keys(row)) {
+            if (NUMERIC_COLUMNS.has(key) && typeof row[key] === 'string') {
+              const num = Number(row[key]);
+              if (!isNaN(num)) row[key] = num;
+            }
+          }
+          const values = config.insertSql.match(/\?/g)!.map((_, i) => {
+            const col = config.columns[i];
+            if (col === undefined) return null; // missing column in export, use default
+            const val = row[col];
+            if (val === '' || val === undefined || val === null) {
+              return null;
+            }
+            return val;
+          });
+          await db.run(config.insertSql, values, false);
+        }
+      }
 
-      await db.run(
-        `INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)
-         ON CONFLICT(name) DO UPDATE SET seq = excluded.seq`,
-        [tableName, maxId],
-        false,
-      );
-    }
+      // 5. Reset AUTOINCREMENT sequences
+      for (const tableName of TABLE_ORDER) {
+        const rows = parsedTables[tableName] ?? [];
+        if (rows.length === 0) continue;
 
-    await db.commitTransaction();
-  } catch (e) {
-    await db.rollbackTransaction();
-    throw e;
+        const maxId = Math.max(
+          ...rows.map((r) => Number(r.id) || 0),
+        );
+
+        await db.run(
+          `INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)
+           ON CONFLICT(name) DO UPDATE SET seq = excluded.seq`,
+          [tableName, maxId],
+          false,
+        );
+      }
+    });
   } finally {
     await db.execute('PRAGMA foreign_keys = ON');
   }

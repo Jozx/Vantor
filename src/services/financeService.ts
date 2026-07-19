@@ -1,4 +1,4 @@
-import { getRepos, getDb } from '@/db';
+import { getRepos, getDb, withTransaction } from '@/db';
 import type {
   Account,
   Holding,
@@ -124,7 +124,6 @@ export async function buySecurity(
   market?: string,
 ): Promise<number> {
   const repos = await getRepos();
-  const db = await getDb();
 
   if (!symbol || symbol.trim().length === 0) throw new Error('Symbol is required');
   if (quantity <= 0) throw new Error('Quantity must be greater than zero');
@@ -141,9 +140,7 @@ export async function buySecurity(
 
   const totalCost = quantity * price + commission;
 
-  // 1. Execute in IMMEDIATE transaction (prevents duplicate holding creation)
-  await db.execute('BEGIN IMMEDIATE TRANSACTION');
-  try {
+  return withTransaction(async () => {
     // Find or create holding (inside transaction to prevent duplicates)
     const cleanSymbol = symbol.trim().toUpperCase();
     const allHoldings = await repos.holdings.findByAccountId(accountId);
@@ -190,12 +187,8 @@ export async function buySecurity(
       throw new Error('Insufficient cash for this security purchase');
     }
 
-    await db.commitTransaction();
     return tradeId;
-  } catch (e) {
-    await db.rollbackTransaction();
-    throw e;
-  }
+  });
 }
 
 // ─── Credit Card Services ─────────────────────────────────────────────────────
@@ -245,7 +238,6 @@ export async function chargeCreditCard(
   date: string,
 ): Promise<number> {
   const repos = await getRepos();
-  const db = await getDb();
 
   if (amount <= 0) throw new Error('Amount must be greater than zero');
   if (!tagId) throw new Error('Tag is required for credit card charges');
@@ -254,17 +246,17 @@ export async function chargeCreditCard(
   const account = await repos.accounts.findById(cardAccountId);
   if (!account) throw new Error('Account not found');
   if (account.type !== 'credit_card') throw new Error('Account is not a credit card');
-  if (!account.credit_limit || account.credit_limit <= 0) {
+  const creditLimit = account.credit_limit;
+  if (!creditLimit || creditLimit <= 0) {
     throw new Error('This credit card has no credit limit set');
   }
 
-  await db.execute('BEGIN IMMEDIATE TRANSACTION');
-  try {
+  return withTransaction(async () => {
     // Re-check debt inside transaction (prevents race condition)
     const latestDebt = await getCardDebtBalance(cardAccountId);
-    if (latestDebt + amount > account.credit_limit) {
+    if (latestDebt + amount > creditLimit) {
       throw new Error(
-        `Charge would exceed credit limit. Available: ${(account.credit_limit - latestDebt).toLocaleString()}`,
+        `Charge would exceed credit limit. Available: ${(creditLimit - latestDebt).toLocaleString()}`,
       );
     }
 
@@ -279,12 +271,8 @@ export async function chargeCreditCard(
       linked_transaction_id: null,
     }, false);
 
-    await db.commitTransaction();
     return txId;
-  } catch (e) {
-    await db.rollbackTransaction();
-    throw e;
-  }
+  });
 }
 
 /**
@@ -300,7 +288,6 @@ export async function payCreditCard(
   date: string,
 ): Promise<void> {
   const repos = await getRepos();
-  const db = await getDb();
 
   if (amount <= 0) throw new Error('Amount must be greater than zero');
   if (!date) throw new Error('Date is required');
@@ -313,8 +300,7 @@ export async function payCreditCard(
   if (!cardAccount) throw new Error('Credit card account not found');
   if (cardAccount.type !== 'credit_card') throw new Error('Target account must be a credit card');
 
-  await db.beginTransaction();
-  try {
+  await withTransaction(async () => {
     // 1. Insert withdrawal on bank account
     const withdrawalId = await repos.cashLedger.create({
       account_id: fromBankAccountId,
@@ -347,12 +333,7 @@ export async function payCreditCard(
     if (bankBalance < 0) {
       throw new Error('Insufficient funds in bank account for this payment');
     }
-
-    await db.commitTransaction();
-  } catch (e) {
-    await db.rollbackTransaction();
-    throw e;
-  }
+  });
 }
 
 // ─── Account Transfer Service ─────────────────────────────────────────────────
@@ -370,7 +351,6 @@ export async function transferBetweenAccounts(
   description?: string,
 ): Promise<void> {
   const repos = await getRepos();
-  const db = await getDb();
 
   if (amount <= 0) throw new Error('Amount must be greater than zero');
   if (!date) throw new Error('Date is required');
@@ -381,8 +361,7 @@ export async function transferBetweenAccounts(
   const toAccount = await repos.accounts.findById(toAccountId);
   if (!toAccount) throw new Error('Destination account not found');
 
-  await db.beginTransaction();
-  try {
+  await withTransaction(async () => {
     // 1. Insert withdrawal on source account
     const withdrawalId = await repos.cashLedger.create({
       account_id: fromAccountId,
@@ -415,12 +394,7 @@ export async function transferBetweenAccounts(
     if (fromBalance < 0) {
       throw new Error('Insufficient funds in source account for this transfer');
     }
-
-    await db.commitTransaction();
-  } catch (e) {
-    await db.rollbackTransaction();
-    throw e;
-  }
+  });
 }
 
 // ─── Tag Services ────────────────────────────────────────────────────────────
@@ -462,7 +436,6 @@ export async function updateSettings(data: Partial<Omit<Settings, 'id'>>): Promi
  */
 export async function runAccrualEngine(): Promise<void> {
   const repos = await getRepos();
-  const db = await getDb();
 
   const mutualFunds = await repos.accounts.findByType('mutual_fund');
   const today = todayISO(); // YYYY-MM-DD
@@ -499,23 +472,21 @@ export async function runAccrualEngine(): Promise<void> {
     if (accruedAmount < 0.01) continue;
 
     // Insert accrual and update last_accrual_date in a transaction
-    await db.beginTransaction();
     try {
-      await repos.cashLedger.create({
-        account_id: fund.id,
-        type: 'interest_accrual',
-        amount: Math.round(accruedAmount * 100) / 100, // round to 2 decimals
-        tag_id: null,
-        description: `Auto-accrual: ${fund.yield_rate}% p.a. over ${elapsedDays} days`,
-        occurred_at: today,
-        related_security_transaction_id: null,
-      }, false);
+      await withTransaction(async () => {
+        await repos.cashLedger.create({
+          account_id: fund.id,
+          type: 'interest_accrual',
+          amount: Math.round(accruedAmount * 100) / 100, // round to 2 decimals
+          tag_id: null,
+          description: `Auto-accrual: ${fund.yield_rate}% p.a. over ${elapsedDays} days`,
+          occurred_at: today,
+          related_security_transaction_id: null,
+        }, false);
 
-      await repos.accounts.update(fund.id, { last_accrual_date: today }, false);
-
-      await db.commitTransaction();
+        await repos.accounts.update(fund.id, { last_accrual_date: today }, false);
+      });
     } catch (e) {
-      await db.rollbackTransaction();
       throw new Error(`Accrual engine failed for account "${fund.name}": ${e instanceof Error ? e.message : String(e)}`, { cause: e });
     }
   }
@@ -898,7 +869,6 @@ export async function sellSecurity(
   description?: string
 ): Promise<number> {
   const repos = await getRepos();
-  const db = await getDb();
 
   if (!symbol || symbol.trim().length === 0) throw new Error('Symbol is required');
   if (quantity <= 0) throw new Error('Quantity must be greater than zero');
@@ -921,9 +891,7 @@ export async function sellSecurity(
     throw new Error(`You do not hold any shares of ${cleanSymbol}`);
   }
 
-  // 2. Execute in IMMEDIATE transaction (prevents overselling via race condition)
-  await db.execute('BEGIN IMMEDIATE TRANSACTION');
-  try {
+  return withTransaction(async () => {
     // 3. Check position integrity inside transaction
     const pos = await repos.securityLedger.netPosition(holding.id);
     const currentQuantity = pos?.net_quantity ?? 0;
@@ -953,10 +921,6 @@ export async function sellSecurity(
       related_security_transaction_id: tradeId,
     }, false);
 
-    await db.commitTransaction();
     return tradeId;
-  } catch (e) {
-    await db.rollbackTransaction();
-    throw e;
-  }
+  });
 }

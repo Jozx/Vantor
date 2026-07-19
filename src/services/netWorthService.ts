@@ -1,4 +1,4 @@
-import { getRepos } from '@/db';
+import { getRepos, withTransaction } from '@/db';
 import { todayISO, toLocalISO } from '@/lib/utils';
 import { computeNetWorth } from './financeService';
 
@@ -41,12 +41,14 @@ export async function refreshNetWorthSnapshot(): Promise<{
     // Compute current net worth
     const result = await computeNetWorth();
 
-    // Store snapshot
-    await repos.netWorthSnapshots.upsertByDate({
-      total_pyg: result.totalPyg,
-      total_usd: result.totalUsd,
-      breakdown_json: JSON.stringify(result.breakdown),
-      snapshot_date: today,
+    // Store snapshot in a serialized transaction
+    await withTransaction(async () => {
+      await repos.netWorthSnapshots.upsertByDate({
+        total_pyg: result.totalPyg,
+        total_usd: result.totalUsd,
+        breakdown_json: JSON.stringify(result.breakdown),
+        snapshot_date: today,
+      });
     });
 
     lastSnapshotDate = today;

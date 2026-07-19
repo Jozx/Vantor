@@ -1,4 +1,4 @@
-import { getRepos } from '@/db';
+import { getRepos, withTransaction } from '@/db';
 
 // ─── API Endpoints ───────────────────────────────────────────────────────────
 
@@ -92,53 +92,59 @@ export async function refreshMarketData(
     const rates = await fetchFxRatesFromApi(baseCurrency);
     const rateEntries = Object.entries(rates);
 
-    // Store rates in both directions (e.g., USD→PYG and PYG→USD)
-    for (const [quoteCurrency, rate] of rateEntries) {
-      if (quoteCurrency === baseCurrency) continue;
-
-      // Store base → quote
-      await repos.marketData.insertFxRate({
-        base: baseCurrency,
-        quote: quoteCurrency,
-        rate,
-        fetched_at: now,
-      });
-
-      // Store quote → base (inverse rate)
-      if (rate > 0) {
-        await repos.marketData.insertFxRate({
-          base: quoteCurrency,
-          quote: baseCurrency,
-          rate: 1 / rate,
-          fetched_at: now,
-        });
-      }
-    }
-
     // 2. Fetch stock prices via Finnhub (only if API key is configured)
     const settings = await repos.settings.get();
     const apiKey = settings.stock_api_key;
 
+    const stockData: Array<{ symbol: string; price: number; currency: string }> = [];
     if (apiKey) {
-      // Auto-discover held symbols from the holdings table
       const allHoldings = await repos.holdings.findAll();
       const uniqueSymbols = [...new Set(allHoldings.map((h) => h.symbol))];
 
       for (const symbol of uniqueSymbols) {
         const holding = allHoldings.find((h) => h.symbol === symbol);
         const currency = holding?.currency ?? 'USD';
-
         const data = await fetchStockPriceFromFinnhub(symbol, apiKey);
         if (data) {
-          await repos.marketData.insertSecurityPrice({
-            symbol: symbol.toUpperCase(),
-            price: data.price,
-            currency: currency as 'PYG' | 'USD',
+          stockData.push({ symbol: symbol.toUpperCase(), price: data.price, currency });
+        }
+      }
+    }
+
+    // 3. Persist all fetched data in a single transaction
+    await withTransaction(async () => {
+      // Store rates in both directions (e.g., USD→PYG and PYG→USD)
+      for (const [quoteCurrency, rate] of rateEntries) {
+        if (quoteCurrency === baseCurrency) continue;
+
+        // Store base → quote
+        await repos.marketData.insertFxRate({
+          base: baseCurrency,
+          quote: quoteCurrency,
+          rate,
+          fetched_at: now,
+        });
+
+        // Store quote → base (inverse rate)
+        if (rate > 0) {
+          await repos.marketData.insertFxRate({
+            base: quoteCurrency,
+            quote: baseCurrency,
+            rate: 1 / rate,
             fetched_at: now,
           });
         }
       }
-    }
+
+      for (const { symbol, price, currency } of stockData) {
+        await repos.marketData.insertSecurityPrice({
+          symbol,
+          price,
+          currency: currency as 'PYG' | 'USD',
+          fetched_at: now,
+        });
+      }
+    });
 
     lastRefreshTime = Date.now();
 

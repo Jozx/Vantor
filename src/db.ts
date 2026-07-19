@@ -21,6 +21,46 @@ let reposInstance: ReturnType<typeof createRepos> | null = null;
 let reposPendingPromise: Promise<ReturnType<typeof createRepos>> | null = null;
 let dbPendingPromise: Promise<SQLiteDBConnection> | null = null;
 
+// ─── Serialized transaction queue ──────────────────────────────────────────────
+// Only one transaction may be in flight on the shared connection at any time.
+// Callers chain onto this promise so transactions execute strictly serially,
+// regardless of how many callers invoke withTransaction concurrently.
+
+let txQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Serialize a database write through a single-promise-chain queue.
+ *
+ * Acquires the next queue slot, begins a transaction, runs `fn`, commits on
+ * success, and rolls back on failure.  The rollback is wrapped in its own
+ * try/catch so a rollback failure never masks the original error (audit 1.12).
+ * The queue slot is always released in the `finally` path so subsequent
+ * callers are never blocked by a failed transaction.
+ */
+export function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  const taskPromise = txQueue.then(async (): Promise<T> => {
+    const db = await getDb();
+    await db.beginTransaction();
+    try {
+      const result = await fn();
+      await db.commitTransaction();
+      return result;
+    } catch (e) {
+      try {
+        await db.rollbackTransaction();
+      } catch {
+        // rollback failure must not mask the original error
+      }
+      throw e;
+    }
+  });
+
+  // Advance the queue, swallowing rejections so the next slot isn't blocked.
+  txQueue = taskPromise.catch(() => {});
+
+  return taskPromise;
+}
+
 /**
  * Generate a cryptographically random 256-bit hex passphrase.
  */
