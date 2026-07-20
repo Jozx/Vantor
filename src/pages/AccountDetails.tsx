@@ -27,6 +27,7 @@ import type { Account, CashTransaction, SecurityTransaction, CashTransactionType
 import { buttonVariants } from '@/components/ui/button';
 import AmountInput from '@/components/AmountInput';
 import { cn, formatMoney, displayTag, todayISO } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   ArrowLeft,
   CircleDollarSign,
@@ -631,13 +632,14 @@ export default function AccountDetails() {
                     <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                       Market
                     </label>
-                    <select
-                      value={tradeMarket}
-                      onChange={(e) => setTradeMarket(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
-                    >
-                      <option value="US">US (NYSE/NASDAQ)</option>
-                    </select>
+                    <Select value={tradeMarket} onValueChange={(val: string) => setTradeMarket(val)}>
+                      <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="US">US (NYSE/NASDAQ)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
@@ -773,26 +775,29 @@ export default function AccountDetails() {
                     <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                       Tag <span className="text-rose-500">*</span>
                     </label>
-                    <select
-                      value={chargeTagId === null ? '' : chargeTagId === -1 ? '__custom__' : String(chargeTagId)}
-                      onChange={(e) => {
-                        if (e.target.value === '__custom__') {
+                    <Select
+                      value={chargeTagId === null ? undefined : chargeTagId === -1 ? '__custom__' : String(chargeTagId)}
+                      onValueChange={(val: string) => {
+                        if (val === '__custom__') {
                           setChargeTagId(-1);
                           setChargeCustomTag('');
                         } else {
-                          setChargeTagId(e.target.value ? Number(e.target.value) : null);
+                          setChargeTagId(Number(val) || null);
                         }
                       }}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                     >
-                      <option value="">Select a tag...</option>
-                      {tags.map((tag) => (
-                        <option key={tag.id} value={tag.id}>
-                          {tag.name}
-                        </option>
-                      ))}
-                      <option value="__custom__">Other (custom)...</option>
-                    </select>
+                      <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                        <SelectValue placeholder="Select a tag..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tags.map((tag) => (
+                          <SelectItem key={tag.id} value={String(tag.id)}>
+                            {tag.name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__custom__">Other (custom)...</SelectItem>
+                      </SelectContent>
+                    </Select>
                     {chargeTagId === -1 && (
                       <input
                         type="text"
@@ -843,18 +848,21 @@ export default function AccountDetails() {
                     <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                       Pay From (Bank Account) <span className="text-rose-500">*</span>
                     </label>
-                    <select
-                      value={payFromAccountId ?? ''}
-                      onChange={(e) => setPayFromAccountId(Number(e.target.value) || null)}
-                      className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
+                    <Select
+                      value={payFromAccountId !== null ? String(payFromAccountId) : undefined}
+                      onValueChange={(val: string) => setPayFromAccountId(val ? Number(val) : null)}
                     >
-                      <option value="">Select bank account...</option>
-                      {bankAccounts.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.name} ({a.currency})
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                        <SelectValue placeholder="Select bank account..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map((a) => (
+                          <SelectItem key={a.id} value={String(a.id)}>
+                            {a.name} ({a.currency})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -920,28 +928,29 @@ export default function AccountDetails() {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                     Transaction Type
                   </label>
-                  <select
-                    value={cashType}
-                    onChange={(e) => setCashType(e.target.value as CashTransactionType)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
-                  >
-                    {isCreditCard ? (
-                      <>
-                        <option value="charge">Charge (Purchase)</option>
-                        <option value="payment">Payment</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="income">Income</option>
-                        <option value="expense">Expense</option>
-                        <option value="deposit">Deposit</option>
-                        <option value="withdrawal">Withdrawal</option>
-                        {account.type === 'mutual_fund' && (
-                          <option value="interest_accrual">Interest Accrual</option>
-                        )}
-                      </>
-                    )}
-                  </select>
+                  <Select value={cashType} onValueChange={(val: string) => setCashType(val as CashTransactionType)}>
+                    <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isCreditCard ? (
+                        <>
+                          <SelectItem value="charge">Charge (Purchase)</SelectItem>
+                          <SelectItem value="payment">Payment</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="income">Income</SelectItem>
+                          <SelectItem value="expense">Expense</SelectItem>
+                          <SelectItem value="deposit">Deposit</SelectItem>
+                          <SelectItem value="withdrawal">Withdrawal</SelectItem>
+                          {account.type === 'mutual_fund' && (
+                            <SelectItem value="interest_accrual">Interest Accrual</SelectItem>
+                          )}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -991,26 +1000,29 @@ export default function AccountDetails() {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                     Tag {(cashType === 'income' || cashType === 'expense' || cashType === 'charge') && <span className="text-rose-500">*</span>}
                   </label>
-                  <select
-                    value={cashTagId === null ? '' : cashTagId === -1 ? '__custom__' : String(cashTagId)}
-                    onChange={(e) => {
-                      if (e.target.value === '__custom__') {
+                  <Select
+                    value={cashTagId === null ? undefined : cashTagId === -1 ? '__custom__' : String(cashTagId)}
+                    onValueChange={(val: string) => {
+                      if (val === '__custom__') {
                         setCashTagId(-1);
                         setCustomTagName('');
                       } else {
-                        setCashTagId(e.target.value ? Number(e.target.value) : null);
+                        setCashTagId(Number(val) || null);
                       }
                     }}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
                   >
-                    <option value="">No tag</option>
-                    {tags.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.name}
-                      </option>
-                    ))}
-                    <option value="__custom__">Other (custom)...</option>
-                  </select>
+                    <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                      <SelectValue placeholder="No tag" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tags.map((tag) => (
+                        <SelectItem key={tag.id} value={String(tag.id)}>
+                          {tag.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__custom__">Other (custom)...</SelectItem>
+                    </SelectContent>
+                  </Select>
                   {cashTagId === -1 && (
                     <input
                       type="text"
@@ -1413,13 +1425,19 @@ export default function AccountDetails() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Tag</label>
-                <select value={editTagId === null ? '' : String(editTagId)} onChange={(e) => setEditTagId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
-                  <option value="">No tag</option>
-                  {tags.map((tag) => (
-                    <option key={tag.id} value={tag.id}>{tag.name}</option>
-                  ))}
-                </select>
+                <Select
+                  value={editTagId !== null ? String(editTagId) : undefined}
+                  onValueChange={(val: string) => setEditTagId(val ? Number(val) : null)}
+                >
+                  <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                    <SelectValue placeholder="No tag" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tags.map((tag) => (
+                      <SelectItem key={tag.id} value={String(tag.id)}>{tag.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="flex gap-3 justify-end mt-6">

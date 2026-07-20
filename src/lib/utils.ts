@@ -34,6 +34,11 @@ export function displayTag(tagName: string | null, description?: string): string
   return tagName;
 }
 
+/** Generate a random hex color for auto-created tags. */
+export function randomTagColor(): string {
+  return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+}
+
 type LucideIcon = typeof Landmark;
 
 export const accountTypeConfig: Record<

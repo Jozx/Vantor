@@ -9,6 +9,7 @@ import {
 import type { Account, AccountType } from '@/db';
 import { getRepos } from '@/db';
 import { cn, formatMoney, accountTypeConfig } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   TrendingUp,
   ArrowUpRight,
@@ -16,7 +17,6 @@ import {
   ArrowLeftRight,
   Wallet,
   AlertCircle,
-  ChevronDown,
 } from 'lucide-react';
 
 type ReportType = AccountType;
@@ -265,30 +265,26 @@ export default function Reports() {
 
         {/* Month / Year */}
         <div className="flex gap-2">
-          <div className="relative">
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              className="appearance-none bg-white dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl px-3 py-2 pr-8 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer"
-            >
+          <Select value={String(selectedMonth)} onValueChange={(val: string) => setSelectedMonth(Number(val))}>
+            <SelectTrigger className="appearance-none bg-white dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl px-3 py-2 pr-8 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {MONTHS.map((m, i) => (
-                <option key={i} value={i}>{m}</option>
+                <SelectItem key={i} value={String(i)}>{m}</SelectItem>
               ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
-          </div>
-          <div className="relative">
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="appearance-none bg-white dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl px-3 py-2 pr-8 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer"
-            >
+            </SelectContent>
+          </Select>
+          <Select value={String(selectedYear)} onValueChange={(val: string) => setSelectedYear(Number(val))}>
+            <SelectTrigger className="appearance-none bg-white dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl px-3 py-2 pr-8 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {yearOptions.map((y) => (
-                <option key={y} value={y}>{y}</option>
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
               ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400 pointer-events-none" />
-          </div>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

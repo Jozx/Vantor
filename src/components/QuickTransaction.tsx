@@ -11,6 +11,7 @@ import {
 } from '@/services/financeService';
 import type { Account, Tag } from '@/db';
 import { cn, todayISO } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AmountInput from '@/components/AmountInput';
 import { X, Plus, AlertCircle, Zap, ArrowRight, CreditCard, Banknote, ArrowLeftRight, CircleDollarSign } from 'lucide-react';
 
@@ -319,21 +320,24 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
               <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                 {intent === 'pay_card' ? 'Pay From' : intent === 'move_money' ? 'From' : 'Account'} <span className="text-rose-500">*</span>
               </label>
-              <select
-                value={fromAccountId ?? ''}
-                onChange={(e) => {
-                  setFromAccountId(Number(e.target.value) || null);
+              <Select
+                value={fromAccountId !== null ? String(fromAccountId) : undefined}
+                onValueChange={(val: string) => {
+                  setFromAccountId(val ? Number(val) : null);
                   setToAccountId(null);
                 }}
-                className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
               >
-                <option value="">Select account...</option>
-                {fromAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.currency})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50">
+                  <SelectValue placeholder="Select account..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {fromAccounts.map((a) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.name} ({a.currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {fromAccounts.length === 0 && (
                 <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">
                   No matching accounts available. Create one first.
@@ -354,18 +358,21 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                   {intent === 'pay_card' ? 'Pay To (Credit Card)' : 'To'}
                 </label>
-                <select
-                  value={toAccountId ?? ''}
-                  onChange={(e) => setToAccountId(Number(e.target.value) || null)}
-                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
+                <Select
+                  value={toAccountId !== null ? String(toAccountId) : undefined}
+                  onValueChange={(val: string) => setToAccountId(val ? Number(val) : null)}
                 >
-                  <option value="">Select account...</option>
-                  {toAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.currency})
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50">
+                    <SelectValue placeholder="Select account..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {toAccounts.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>
+                        {a.name} ({a.currency})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {toAccounts.length === 0 && (
                   <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">
                     No matching accounts available. Create one first.
@@ -408,26 +415,29 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                   Tag <span className="text-rose-500">*</span>
                 </label>
-                <select
-                  value={tagId === null ? '' : tagId === -1 ? '__custom__' : String(tagId)}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom__') {
+                <Select
+                  value={tagId === null ? undefined : tagId === -1 ? '__custom__' : String(tagId)}
+                  onValueChange={(val: string) => {
+                    if (val === '__custom__') {
                       setTagId(-1);
                       setCustomTagName('');
                     } else {
-                      setTagId(e.target.value ? Number(e.target.value) : null);
+                      setTagId(Number(val) || null);
                     }
                   }}
-                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50"
                 >
-                  <option value="">Select a tag...</option>
-                  {tags.map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </option>
-                  ))}
-                  <option value="__custom__">Other (custom)...</option>
-                </select>
+                  <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50">
+                    <SelectValue placeholder="Select a tag..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tags.map((tag) => (
+                      <SelectItem key={tag.id} value={String(tag.id)}>
+                        {tag.name}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">Other (custom)...</SelectItem>
+                  </SelectContent>
+                </Select>
                 {tagId === -1 && (
                   <input
                     type="text"

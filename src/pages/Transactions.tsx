@@ -13,6 +13,7 @@ import type { Account, CashTransactionType, Tag } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
 import AmountInput from '@/components/AmountInput';
 import { cn, formatMoney, displayTag } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Calendar,
   Filter,
@@ -271,58 +272,67 @@ export default function Transactions() {
             <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
               Account
             </label>
-            <select
-              value={filterAccount}
-              onChange={(e) => setFilterAccount(e.target.value ? Number(e.target.value) : '')}
-              className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+            <Select
+              value={filterAccount !== '' ? String(filterAccount) : undefined}
+              onValueChange={(val: string) => setFilterAccount(val ? Number(val) : '')}
             >
-              <option value="">All accounts</option>
-              {accounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
+                <SelectValue placeholder="All accounts" />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((acc) => (
+                  <SelectItem key={acc.id} value={String(acc.id)}>
+                    {acc.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
               Tag
             </label>
-            <select
-              value={filterTag}
-              onChange={(e) => setFilterTag(e.target.value ? Number(e.target.value) : '')}
-              className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+            <Select
+              value={filterTag !== '' ? String(filterTag) : undefined}
+              onValueChange={(val: string) => setFilterTag(val ? Number(val) : '')}
             >
-              <option value="">All tags</option>
-              {tags.map((tag) => (
-                <option key={tag.id} value={tag.id}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
+                <SelectValue placeholder="All tags" />
+              </SelectTrigger>
+              <SelectContent>
+                {tags.map((tag) => (
+                  <SelectItem key={tag.id} value={String(tag.id)}>
+                    {tag.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
               Type
             </label>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as CashTransactionType | '')}
-              className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
+            <Select
+              value={filterType || undefined}
+              onValueChange={(val: string) => setFilterType(val as CashTransactionType | '')}
             >
-              <option value="">All types</option>
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-              <option value="deposit">Deposit</option>
-              <option value="withdrawal">Withdrawal</option>
-              <option value="interest_accrual">Interest Accrual</option>
-              <option value="buy_debit">Buy (Debit)</option>
-              <option value="sell_credit">Sell (Credit)</option>
-              <option value="charge">Charge</option>
-              <option value="payment">Payment</option>
-            </select>
+              <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="income">Income</SelectItem>
+                <SelectItem value="expense">Expense</SelectItem>
+                <SelectItem value="deposit">Deposit</SelectItem>
+                <SelectItem value="withdrawal">Withdrawal</SelectItem>
+                <SelectItem value="interest_accrual">Interest Accrual</SelectItem>
+                <SelectItem value="buy_debit">Buy (Debit)</SelectItem>
+                <SelectItem value="sell_credit">Sell (Credit)</SelectItem>
+                <SelectItem value="charge">Charge</SelectItem>
+                <SelectItem value="payment">Payment</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -531,13 +541,19 @@ export default function Transactions() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Tag</label>
-                <select value={editTagId === null ? '' : String(editTagId)} onChange={(e) => setEditTagId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
-                  <option value="">No tag</option>
-                  {tags.map((tag) => (
-                    <option key={tag.id} value={tag.id}>{tag.name}</option>
-                  ))}
-                </select>
+                <Select
+                  value={editTagId !== null ? String(editTagId) : undefined}
+                  onValueChange={(val: string) => setEditTagId(val ? Number(val) : null)}
+                >
+                  <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                    <SelectValue placeholder="No tag" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tags.map((tag) => (
+                      <SelectItem key={tag.id} value={String(tag.id)}>{tag.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="flex gap-3 justify-end mt-6">

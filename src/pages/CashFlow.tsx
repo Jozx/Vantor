@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Sankey, Tooltip } from 'recharts';
 import type { SankeyNodeProps, SankeyLinkProps } from 'recharts';
 import {
@@ -10,6 +10,7 @@ import type {
   SankeyDiagramData,
 } from '@/services/financeService';
 import { cn, formatMoney } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -70,6 +71,43 @@ function formatAmount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return value.toLocaleString();
+}
+
+function SankeyDiagram({ data }: { data: SankeyDiagramData }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(800);
+
+  const measure = useCallback(() => {
+    if (containerRef.current) {
+      const w = containerRef.current.offsetWidth - 32;
+      setWidth(Math.max(w, 400));
+    }
+  }, []);
+
+  useEffect(() => {
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [measure]);
+
+  return (
+    <div ref={containerRef} className="p-4">
+      <Sankey
+        width={width}
+        height={Math.min(400, Math.max(300, width * 0.5))}
+        data={{ nodes: data.nodes, links: data.links }}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        node={CustomNode as any}
+        link={{ stroke: '#71717a', strokeOpacity: 0.3 }}
+        nodePadding={20}
+        nodeWidth={10}
+        margin={{ top: 10, right: 120, bottom: 10, left: 10 }}
+      >
+        <Tooltip content={<CustomTooltip />} />
+      </Sankey>
+    </div>
+  );
 }
 
 export default function CashFlow() {
@@ -166,27 +204,29 @@ export default function CashFlow() {
 
           {/* Month picker (when specificMonth) */}
           {periodMode === 'specificMonth' && (
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
-            >
-              {MONTH_NAMES.map((name, i) => (
-                <option key={i} value={i}>{name}</option>
-              ))}
-            </select>
+            <Select value={String(selectedMonth)} onValueChange={(val: string) => setSelectedMonth(Number(val))}>
+              <SelectTrigger className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_NAMES.map((name, i) => (
+                  <SelectItem key={i} value={String(i)}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
 
           {/* Year picker */}
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900"
-          >
-            {Array.from({ length: 11 }, (_, i) => currentYear - 5 + i).map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <Select value={String(selectedYear)} onValueChange={(val: string) => setSelectedYear(Number(val))}>
+            <SelectTrigger className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 w-auto">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: 11 }, (_, i) => currentYear - 5 + i).map((y) => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -252,21 +292,7 @@ export default function CashFlow() {
           <div className="px-6 py-4 bg-zinc-50/50 dark:bg-zinc-950/20 border-b border-zinc-200/40 dark:border-zinc-800/40">
             <h4 className="font-bold text-zinc-800 dark:text-zinc-200">Flow Diagram</h4>
           </div>
-          <div className="p-4 overflow-x-auto">
-            <Sankey
-              width={800}
-              height={400}
-              data={{ nodes: data.nodes, links: data.links }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              node={CustomNode as any}
-              link={{ stroke: '#71717a', strokeOpacity: 0.3 }}
-              nodePadding={20}
-              nodeWidth={10}
-              margin={{ top: 10, right: 120, bottom: 10, left: 10 }}
-            >
-              <Tooltip content={<CustomTooltip />} />
-            </Sankey>
-          </div>
+          <SankeyDiagram data={data} />
         </div>
       )}
 

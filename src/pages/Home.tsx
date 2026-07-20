@@ -244,11 +244,23 @@ export default function Home() {
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-24 sm:pb-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight">Dashboard</h1>
-        <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
-          Overview of your financial accounts
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Dashboard</h1>
+          <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">
+            Overview of your financial accounts
+          </p>
+        </div>
+        <button
+          onClick={() => setShowQuickTx(true)}
+          className={cn(
+            buttonVariants({ variant: 'default' }),
+            'hidden md:flex gap-2 bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-lg shrink-0'
+          )}
+        >
+          <Zap className="h-4 w-4" />
+          Add Transaction
+        </button>
       </div>
 
       {/* Loading State */}
@@ -684,12 +696,12 @@ export default function Home() {
         }}
       />
 
-      {/* FAB - Quick Add */}
+      {/* FAB - Quick Add (mobile only) */}
       <button
         onClick={() => setShowQuickTx(true)}
         className={cn(
-          'fixed bottom-14 right-4 sm:bottom-6 sm:right-6 z-40',
-          'h-12 w-12 sm:h-14 sm:w-14 rounded-full shadow-lg',
+          'fixed bottom-14 right-4 z-40 sm:hidden',
+          'h-12 w-12 rounded-full shadow-lg',
           'bg-amber-500 hover:bg-amber-600 text-white',
           'flex items-center justify-center',
           'transition-all duration-200 hover:scale-105 active:scale-95',
@@ -697,7 +709,7 @@ export default function Home() {
         )}
         title="Quick Add Transaction"
       >
-        <Zap className="h-5 w-5 sm:h-6 sm:w-6" />
+        <Zap className="h-5 w-5" />
       </button>
     </div>
   );

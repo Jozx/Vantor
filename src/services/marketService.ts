@@ -79,6 +79,42 @@ async function fetchStockPriceFromFinnhub(
   }
 }
 
+/**
+ * Fetch stock prices in batches with concurrency control.
+ * Finnhub's free tier allows ~60 calls/minute, so we batch 5 at a time
+ * with a small delay between batches to avoid rate-limiting.
+ */
+async function fetchStockPricesBatch(
+  symbols: string[],
+  apiKey: string,
+  concurrency = 5,
+): Promise<Array<{ symbol: string; price: number; currency: string }>> {
+  const results: Array<{ symbol: string; price: number; currency: string }> = [];
+
+  for (let i = 0; i < symbols.length; i += concurrency) {
+    const batch = symbols.slice(i, i + concurrency);
+    const batchResults = await Promise.allSettled(
+      batch.map(async (symbol) => {
+        const data = await fetchStockPriceFromFinnhub(symbol, apiKey);
+        return data ? { symbol: symbol.toUpperCase(), price: data.price, currency: data.currency } : null;
+      }),
+    );
+
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled' && result.value) {
+        results.push(result.value);
+      }
+    }
+
+    // Small delay between batches to respect rate limits
+    if (i + concurrency < symbols.length) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  return results;
+}
+
 // ─── Main Refresh Function ───────────────────────────────────────────────────
 
 export async function refreshMarketData(
@@ -100,15 +136,7 @@ export async function refreshMarketData(
     if (apiKey) {
       const allHoldings = await repos.holdings.findAll();
       const uniqueSymbols = [...new Set(allHoldings.map((h) => h.symbol))];
-
-      for (const symbol of uniqueSymbols) {
-        const holding = allHoldings.find((h) => h.symbol === symbol);
-        const currency = holding?.currency ?? 'USD';
-        const data = await fetchStockPriceFromFinnhub(symbol, apiKey);
-        if (data) {
-          stockData.push({ symbol: symbol.toUpperCase(), price: data.price, currency });
-        }
-      }
+      stockData.push(...await fetchStockPricesBatch(uniqueSymbols, apiKey));
     }
 
     // 3. Persist all fetched data in a single transaction

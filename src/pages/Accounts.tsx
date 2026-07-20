@@ -11,6 +11,7 @@ import {
 import type { HoldingWithStats, AccountWithBalance } from '@/services/financeService';
 import type { Account, AccountType, Currency } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, formatMoney, accountTypeConfig, todayISO } from '@/lib/utils';
 import AmountInput from '@/components/AmountInput';
 import {
@@ -497,29 +498,31 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                     Account Type
                   </label>
-                  <select
-                    value={type}
-                    onChange={(e) => setType(e.target.value as AccountType)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
-                  >
-                    <option value="bank">Bank Account</option>
-                    <option value="broker">Brokerage</option>
-                    <option value="mutual_fund">Mutual Fund</option>
-                    <option value="credit_card">Credit Card</option>
-                  </select>
+                  <Select value={type} onValueChange={(val: string) => setType(val as AccountType)}>
+                    <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank">Bank Account</SelectItem>
+                      <SelectItem value="broker">Brokerage</SelectItem>
+                      <SelectItem value="mutual_fund">Mutual Fund</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                     Currency
                   </label>
-                  <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value as Currency)}
-                    className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="PYG">PYG (Gs.)</option>
-                  </select>
+                  <Select value={currency} onValueChange={(val: string) => setCurrency(val as Currency)}>
+                    <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD ($)</SelectItem>
+                      <SelectItem value="PYG">PYG (Gs.)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 

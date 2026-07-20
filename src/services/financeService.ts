@@ -20,6 +20,43 @@ export interface AccountWithBalance extends Account {
   balance: number;
 }
 
+// ─── Shared Balance Validation ──────────────────────────────────────────────
+
+/**
+ * Validate that an account's balance (or credit card debt) is within
+ * acceptable limits after a mutation. Throws on violation.
+ *
+ * Used by editCashTransaction, deleteCashTransactionValidated,
+ * deleteLinkedTransaction, deleteTrade, and buySecurity to enforce
+ * the same invariants without code duplication.
+ */
+async function validateAccountBalance(
+  accountId: number,
+  repos: Awaited<ReturnType<typeof getRepos>>,
+  contextLabel = 'Operation',
+): Promise<void> {
+  const account = await repos.accounts.findById(accountId);
+  if (!account) return;
+
+  if (account.type === 'credit_card') {
+    const debt = await getCardDebtBalance(accountId);
+    const limit = account.credit_limit ?? 0;
+    if (limit > 0 && debt > limit) {
+      throw new Error(
+        `${contextLabel} would exceed credit limit on ${account.name}. ` +
+        `Available: ${(limit - debt).toLocaleString()}`,
+      );
+    }
+  } else {
+    const bal = await repos.cashLedger.runningBalance(accountId);
+    if (bal < 0) {
+      throw new Error(
+        `${contextLabel} would result in a negative balance on ${account.name}`,
+      );
+    }
+  }
+}
+
 // ─── Account Services ─────────────────────────────────────────────────────────
 
 export async function getAccounts(): Promise<Account[]> {
@@ -109,40 +146,12 @@ export async function editCashTransaction(
       }
     }
 
-    // Re-validate
-    if (current.account_id) {
-      const account = await repos.accounts.findById(current.account_id);
-      if (account?.type === 'credit_card') {
-        const debt = await getCardDebtBalance(current.account_id);
-        const limit = account.credit_limit ?? 0;
-        if (limit > 0 && debt > limit) {
-          throw new Error(`Edit would exceed credit limit. Available: ${(limit - debt).toLocaleString()}`);
-        }
-      } else {
-        const bal = await repos.cashLedger.runningBalance(current.account_id);
-        if (bal < 0) {
-          throw new Error('Edit would result in a negative balance');
-        }
-      }
-    }
+    await validateAccountBalance(current.account_id, repos, 'Edit');
 
-    // Also re-validate the linked account if applicable
     if (isLinked && linkedId && data.amount !== undefined) {
       const linked = await repos.cashLedger.findById(linkedId);
       if (linked) {
-        const linkedAccount = await repos.accounts.findById(linked.account_id);
-        if (linkedAccount?.type === 'credit_card') {
-          const debt = await getCardDebtBalance(linked.account_id);
-          const limit = linkedAccount.credit_limit ?? 0;
-          if (limit > 0 && debt > limit) {
-            throw new Error('Edit would exceed credit limit on linked account');
-          }
-        } else {
-          const bal = await repos.cashLedger.runningBalance(linked.account_id);
-          if (bal < 0) {
-            throw new Error('Edit would result in a negative balance on linked account');
-          }
-        }
+        await validateAccountBalance(linked.account_id, repos, 'Edit (linked)');
       }
     }
   });
@@ -165,20 +174,7 @@ export async function deleteCashTransactionValidated(id: number): Promise<void> 
 
   await withTransaction(async () => {
     await repos.cashLedger.remove(id, false);
-
-    const account = await repos.accounts.findById(current.account_id);
-    if (account?.type === 'credit_card') {
-      const debt = await getCardDebtBalance(current.account_id);
-      const limit = account.credit_limit ?? 0;
-      if (limit > 0 && debt > limit) {
-        throw new Error(`Deletion would exceed credit limit. Available: ${(limit - debt).toLocaleString()}`);
-      }
-    } else {
-      const bal = await repos.cashLedger.runningBalance(current.account_id);
-      if (bal < 0) {
-        throw new Error('Deletion would result in a negative balance');
-      }
-    }
+    await validateAccountBalance(current.account_id, repos, 'Deletion');
   });
 }
 
@@ -201,26 +197,11 @@ export async function deleteLinkedTransaction(id: number): Promise<void> {
   const accountIds = new Set([current.account_id, linked.account_id]);
 
   await withTransaction(async () => {
-    // Delete both sides (order doesn't matter within a transaction)
     await repos.cashLedger.remove(id, false);
     await repos.cashLedger.remove(linkedId, false);
 
-    // Re-validate every affected account
     for (const accountId of accountIds) {
-      const account = await repos.accounts.findById(accountId);
-      if (!account) continue;
-      if (account.type === 'credit_card') {
-        const debt = await getCardDebtBalance(accountId);
-        const limit = account.credit_limit ?? 0;
-        if (limit > 0 && debt > limit) {
-          throw new Error(`Deletion would exceed credit limit on ${account.name}`);
-        }
-      } else {
-        const bal = await repos.cashLedger.runningBalance(accountId);
-        if (bal < 0) {
-          throw new Error(`Deletion would result in a negative balance on ${account.name}`);
-        }
-      }
+      await validateAccountBalance(accountId, repos, 'Deletion (linked)');
     }
   });
 }
@@ -234,32 +215,16 @@ export async function deleteTrade(tradeId: number): Promise<void> {
   const trade = await repos.securityLedger.findById(tradeId);
   if (!trade) throw new Error('Trade not found');
 
-  // Find the cash row that references this trade
-  const cashRows = await repos.cashLedger.findAll();
-  const cashRow = cashRows.find((r) => r.related_security_transaction_id === tradeId);
+  const cashRow = await repos.cashLedger.findBySecurityTransactionId(tradeId);
 
   await withTransaction(async () => {
-    // Delete both rows
     await repos.securityLedger.remove(tradeId, false);
     if (cashRow) {
       await repos.cashLedger.remove(cashRow.id, false);
     }
 
-    // Re-validate the account
     if (cashRow) {
-      const account = await repos.accounts.findById(cashRow.account_id);
-      if (account?.type === 'credit_card') {
-        const debt = await getCardDebtBalance(cashRow.account_id);
-        const limit = account.credit_limit ?? 0;
-        if (limit > 0 && debt > limit) {
-          throw new Error(`Trade deletion would exceed credit limit on ${account.name}`);
-        }
-      } else {
-        const bal = await repos.cashLedger.runningBalance(cashRow.account_id);
-        if (bal < 0) {
-          throw new Error(`Trade deletion would result in a negative balance on account #${cashRow.account_id}`);
-        }
-      }
+      await validateAccountBalance(cashRow.account_id, repos, 'Trade deletion');
     }
   });
 }

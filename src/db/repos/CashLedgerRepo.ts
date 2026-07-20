@@ -129,6 +129,15 @@ export class CashLedgerRepo {
     return (result.values ?? []) as CashTransaction[];
   }
 
+  /** Find the cash transaction linked to a specific security transaction. */
+  async findBySecurityTransactionId(securityTransactionId: number): Promise<CashTransaction | undefined> {
+    const result = await this.db.query(
+      'SELECT * FROM cash_transactions WHERE related_security_transaction_id = ? LIMIT 1',
+      [securityTransactionId],
+    );
+    return (result.values?.[0] as CashTransaction | undefined);
+  }
+
   async findByTagId(tagId: number): Promise<CashTransaction[]> {
     const result = await this.db.query(
       'SELECT * FROM cash_transactions WHERE tag_id = ? ORDER BY occurred_at DESC',
