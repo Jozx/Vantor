@@ -10,6 +10,7 @@ import type {
   SankeyDiagramData,
 } from '@/services/financeService';
 import { cn, formatMoney } from '@/lib/utils';
+import { usePrivacy } from '@/components/PrivacyProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 
@@ -111,6 +112,7 @@ function SankeyDiagram({ data }: { data: SankeyDiagramData }) {
 }
 
 export default function CashFlow() {
+  const { showValues } = usePrivacy();
   const [periodMode, setPeriodMode] = useState<PeriodMode>('thisMonth');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -260,13 +262,13 @@ export default function CashFlow() {
           <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-5 shadow-xs">
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Income</p>
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-              {formatMoney(data.totalIncome, baseCurrency as 'PYG' | 'USD')}
+              {!showValues ? `***.*** ${baseCurrency}` : formatMoney(data.totalIncome, baseCurrency as 'PYG' | 'USD')}
             </p>
           </div>
           <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-5 shadow-xs">
             <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Expenses</p>
             <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-              {formatMoney(data.totalExpense, baseCurrency as 'PYG' | 'USD')}
+              {!showValues ? `***.*** ${baseCurrency}` : formatMoney(data.totalExpense, baseCurrency as 'PYG' | 'USD')}
             </p>
           </div>
           <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-5 shadow-xs">
@@ -279,7 +281,7 @@ export default function CashFlow() {
                   : 'text-rose-600 dark:text-rose-400',
               )}
             >
-              {formatMoney(data.totalIncome - data.totalExpense, baseCurrency as 'PYG' | 'USD')}
+              {!showValues ? `***.*** ${baseCurrency}` : formatMoney(data.totalIncome - data.totalExpense, baseCurrency as 'PYG' | 'USD')}
             </p>
           </div>
         </div>

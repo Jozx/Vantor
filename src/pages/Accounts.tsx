@@ -11,6 +11,7 @@ import {
 import type { HoldingWithStats, AccountWithBalance } from '@/services/financeService';
 import type { Account, AccountType, Currency } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
+import { usePrivacy } from '@/components/PrivacyProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, formatMoney, accountTypeConfig, todayISO } from '@/lib/utils';
 import AmountInput from '@/components/AmountInput';
@@ -34,9 +35,15 @@ type AccountsProps = {
 const allTypes: AccountType[] = ['bank', 'broker', 'mutual_fund', 'credit_card'];
 
 export default function Accounts({ filterType }: AccountsProps) {
+  const { showValues } = usePrivacy();
   const [accounts, setAccounts] = useState<AccountWithBalance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+
+  const showAmount = (value: number, currency: Currency | string) => {
+    if (!showValues) return `***.*** ${currency}`;
+    return formatMoney(value, currency as Currency);
+  };
 
   const visibleTypes: AccountType[] = filterType
     ? Array.isArray(filterType) ? filterType : [filterType]
@@ -320,14 +327,14 @@ export default function Accounts({ filterType }: AccountsProps) {
                             .filter(([, v]) => v !== 0)
                             .map(([cur, total]) => (
                               <span key={cur} className="text-sm font-extrabold text-zinc-900 dark:text-zinc-50 leading-tight">
-                                {formatMoney(total, cur as Currency)}
+                                {showAmount(total, cur as Currency)}
                               </span>
                             ))
                           }
                         </div>
                       ) : (
                         <span className="text-sm font-extrabold text-zinc-900 dark:text-zinc-50">
-                          {formatMoney(groupTotal(accType), list[0]?.currency ?? 'PYG')}
+                          {showAmount(groupTotal(accType), list[0]?.currency ?? 'PYG')}
                         </span>
                       )
                     )}
@@ -380,12 +387,12 @@ export default function Accounts({ filterType }: AccountsProps) {
                                     : 'text-zinc-900 dark:text-zinc-50'
                                 )}>
                                   {acc.type === 'credit_card'
-                                    ? formatMoney(Math.abs(acc.balance), acc.currency)
-                                    : formatMoney(acc.balance, acc.currency)}
+                                    ? showAmount(Math.abs(acc.balance), acc.currency)
+                                    : showAmount(acc.balance, acc.currency)}
                                 </span>
                                 {acc.type === 'credit_card' && acc.credit_limit != null && (
                                   <span className="text-xs text-zinc-400 mt-0.5 block">
-                                    Available: {formatMoney(acc.credit_limit - Math.abs(acc.balance), acc.currency)}
+                                    Available: {showAmount(acc.credit_limit - Math.abs(acc.balance), acc.currency)}
                                   </span>
                                 )}
                               </div>

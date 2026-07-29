@@ -25,6 +25,7 @@ import { getSecurityPrice } from '@/services/marketService';
 import type { HoldingWithStats } from '@/services/financeService';
 import type { Account, CashTransaction, SecurityTransaction, CashTransactionType, Tag } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
+import { usePrivacy } from '@/components/PrivacyProvider';
 import AmountInput from '@/components/AmountInput';
 import { cn, formatMoney, displayTag, todayISO } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -45,8 +46,14 @@ import {
 } from 'lucide-react';
 
 export default function AccountDetails() {
+  const { showValues } = usePrivacy();
   const { id } = useParams<{ id: string }>();
   const accountId = parseInt(id || '0');
+
+  const showAmount = (value: number, currency: string) => {
+    if (!showValues) return `***.*** ${currency}`;
+    return formatMoney(value, currency);
+  };
 
   const [account, setAccount] = useState<Account | null>(null);
   const [balance, setBalance] = useState<number>(0);
@@ -551,14 +558,14 @@ export default function AccountDetails() {
             {isCreditCard ? 'Debt Balance' : 'Running Cash Balance'}
           </span>
           <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50">
-            {isCreditCard ? formatMoney(cardDebt, account.currency) : formatMoney(balance, account.currency)}
+            {isCreditCard ? showAmount(cardDebt, account.currency) : showAmount(balance, account.currency)}
           </span>
           {isCreditCard && (
             <div className="flex items-center gap-4 text-xs text-zinc-400 mt-1">
               {account.credit_limit != null && (
                 <>
-                  <span>Limit: {formatMoney(account.credit_limit, account.currency)}</span>
-                  <span>Available: {formatMoney(account.credit_limit - cardDebt, account.currency)}</span>
+                  <span>Limit: {showAmount(account.credit_limit, account.currency)}</span>
+                  <span>Available: {showAmount(account.credit_limit - cardDebt, account.currency)}</span>
                 </>
               )}
             </div>
@@ -728,9 +735,9 @@ export default function AccountDetails() {
                 </h3>
 
                 <div className="mb-4 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg text-xs text-zinc-500 dark:text-zinc-400 flex flex-wrap gap-x-3">
-                  <span><span className="font-semibold">Debt:</span> {formatMoney(cardDebt, account.currency)}</span>
+                  <span><span className="font-semibold">Debt:</span> {showAmount(cardDebt, account.currency)}</span>
                   {account.credit_limit != null && (
-                    <span><span className="font-semibold">Available:</span> {formatMoney(account.credit_limit - cardDebt, account.currency)}</span>
+                    <span><span className="font-semibold">Available:</span> {showAmount(account.credit_limit - cardDebt, account.currency)}</span>
                   )}
                 </div>
 
@@ -1144,25 +1151,25 @@ export default function AccountDetails() {
                             </td>
                             <td className="px-6 py-4 text-right font-medium">{h.quantity}</td>
                             <td className="px-6 py-4 text-right font-medium">
-                              {formatMoney(h.averageCost, account.currency)}
+                              {showAmount(h.averageCost, account.currency)}
                             </td>
                             <td className="px-6 py-4 text-right font-bold">
-                              {formatMoney(h.totalCost, account.currency)}
+                              {showAmount(h.totalCost, account.currency)}
                             </td>
                             <td className="px-6 py-4 text-right font-medium">
-                              {mktPrice !== null ? formatMoney(mktPrice, account.currency) : (
+                              {mktPrice !== null ? showAmount(mktPrice, account.currency) : (
                                 <span className="text-zinc-300 dark:text-zinc-600">—</span>
                               )}
                             </td>
                             <td className="px-6 py-4 text-right font-bold">
-                              {mktValue !== null ? formatMoney(mktValue, account.currency) : (
+                              {mktValue !== null ? showAmount(mktValue, account.currency) : (
                                 <span className="text-zinc-300 dark:text-zinc-600">—</span>
                               )}
                             </td>
                             <td className="px-6 py-4 text-right font-bold">
                               {pl !== null ? (
                                 <span className={cn(pl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
-                                  {pl >= 0 ? '+' : ''}{formatMoney(pl, account.currency)}
+                                  {pl >= 0 ? '+' : ''}{showAmount(pl, account.currency)}
                                 </span>
                               ) : (
                                 <span className="text-zinc-300 dark:text-zinc-600">—</span>
@@ -1277,7 +1284,7 @@ export default function AccountDetails() {
                                   : 'text-rose-600 dark:text-rose-400'
                               )}
                             >
-                              {isPositive ? '+' : '-'}{formatMoney(tx.amount, account.currency)}
+                              {isPositive ? '+' : '-'}{showAmount(tx.amount, account.currency)}
                             </td>
                             <td className="px-6 py-4 text-center">
                               <div className="flex items-center justify-center gap-1">
@@ -1368,13 +1375,13 @@ export default function AccountDetails() {
                             </td>
                             <td className="px-6 py-4 text-right font-medium">{st.quantity}</td>
                             <td className="px-6 py-4 text-right font-medium">
-                              {formatMoney(st.price, account.currency)}
+                              {showAmount(st.price, account.currency)}
                             </td>
                             <td className="px-6 py-4 text-right font-medium text-zinc-400">
-                              {formatMoney(st.commission, account.currency)}
+                              {showAmount(st.commission, account.currency)}
                             </td>
                             <td className="px-6 py-4 text-right font-bold">
-                              {formatMoney(netVal, account.currency)}
+                              {showAmount(netVal, account.currency)}
                             </td>
                             <td className="px-6 py-4 text-center">
                               <button

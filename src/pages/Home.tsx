@@ -7,6 +7,7 @@ import {
   type NetWorthHistoryPoint,
 } from '@/services/netWorthService';
 import { useTheme } from '@/components/ThemeProvider';
+import { usePrivacy } from '@/components/PrivacyProvider';
 import {
   exportToZip,
   parseImportZip,
@@ -48,8 +49,6 @@ import {
   PiggyBank,
   Receipt,
   ChartPie,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 
 type ChartRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
@@ -95,10 +94,10 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showQuickTx, setShowQuickTx] = useState(false);
   const [netWorth, setNetWorth] = useState<NetWorthResult | null>(null);
+  const { showValues } = usePrivacy();
   const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseTagBreakdown[]>([]);
   const [expenseLoading, setExpenseLoading] = useState(false);
   const [pieCurrency, setPieCurrency] = useState<Currency>('PYG');
-  const [showValues, setShowValues] = useState(true);
 
   // Net worth chart state
   const [chartRange, setChartRange] = useState<ChartRange>('1Y');
@@ -329,17 +328,6 @@ export default function Home() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setShowValues((v) => !v)}
-            className={cn(
-              buttonVariants({ variant: 'outline', size: 'sm' }),
-              'gap-1.5 text-xs font-semibold cursor-pointer'
-            )}
-            title={showValues ? 'Hide amounts' : 'Show amounts'}
-          >
-            {showValues ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            {showValues ? 'Hide' : 'Show'}
-          </button>
           <button
             onClick={() => setShowQuickTx(true)}
             className={cn(

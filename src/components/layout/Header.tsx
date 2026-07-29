@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
-import { Wallet, Menu } from 'lucide-react';
+import { Wallet, Menu, Eye, EyeOff } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import { usePrivacy } from '@/components/PrivacyProvider';
+import { cn } from '@/lib/utils';
 
 export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
+  const { showValues, setShowValues } = usePrivacy();
   return (
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200/40 dark:border-zinc-800/40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -14,6 +17,18 @@ export default function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
           <span>Vantor</span>
         </Link>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowValues(!showValues)}
+            className={cn(
+              'p-2 rounded-lg transition-colors cursor-pointer',
+              showValues
+                ? 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                : 'text-amber-500 dark:text-amber-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+            )}
+            title={showValues ? 'Hide amounts' : 'Show amounts'}
+          >
+            {showValues ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
           <ThemeToggle />
           <button
             onClick={onMenuOpen}

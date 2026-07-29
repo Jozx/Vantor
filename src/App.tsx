@@ -1,5 +1,6 @@
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { PrivacyProvider } from '@/components/PrivacyProvider';
 import Layout from '@/components/layout/Layout';
 import BackButtonHandler from '@/components/runners/BackButtonHandler';
 import AccrualRunner from '@/components/runners/AccrualRunner';
@@ -20,6 +21,7 @@ import type { AccountType } from '@/db';
 export default function App() {
   return (
     <ThemeProvider>
+      <PrivacyProvider>
       <Router>
         <BackButtonHandler />
         <AccrualRunner />
@@ -41,6 +43,7 @@ export default function App() {
           </Routes>
         </Layout>
       </Router>
+      </PrivacyProvider>
     </ThemeProvider>
   );
 }

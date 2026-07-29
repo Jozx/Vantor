@@ -11,6 +11,7 @@ import {
 import type { CashTransactionWithAccount } from '@/services/financeService';
 import type { Account, CashTransactionType, Tag } from '@/db';
 import { buttonVariants } from '@/components/ui/button';
+import { usePrivacy } from '@/components/PrivacyProvider';
 import AmountInput from '@/components/AmountInput';
 import { cn, formatMoney, displayTag } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -29,6 +30,7 @@ type SortField = 'occurred_at' | 'amount' | 'type' | 'account_name' | 'tag_name'
 type SortDir = 'asc' | 'desc';
 
 export default function Transactions() {
+  const { showValues } = usePrivacy();
   const [transactions, setTransactions] = useState<CashTransactionWithAccount[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
@@ -484,7 +486,7 @@ export default function Transactions() {
                               : 'text-rose-600 dark:text-rose-400'
                           )}
                         >
-                          {isPositive ? '+' : '-'}{formatMoney(tx.amount, tx.account_currency)}
+                          {isPositive ? '+' : '-'}{!showValues ? `***.*** ${tx.account_currency}` : formatMoney(tx.amount, tx.account_currency)}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1">

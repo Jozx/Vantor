@@ -9,6 +9,7 @@ import {
 import type { Account, AccountType } from '@/db';
 import { getRepos } from '@/db';
 import { cn, formatMoney, accountTypeConfig } from '@/lib/utils';
+import { usePrivacy } from '@/components/PrivacyProvider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   TrendingUp,
@@ -39,6 +40,7 @@ function currentMonthYear() {
 }
 
 export default function Reports() {
+  const { showValues } = usePrivacy();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -343,7 +345,7 @@ export default function Reports() {
                             ? 'text-zinc-900 dark:text-zinc-50'
                             : 'text-rose-600 dark:text-rose-400'
                         )}>
-                          {line.amount >= 0 ? '+' : ''}{formatMoney(Math.abs(line.amount), reportAccounts[0]?.currency ?? 'PYG')}
+                           {line.amount >= 0 ? '+' : ''}{!showValues ? `***.*** ${reportAccounts[0]?.currency ?? 'PYG'}` : formatMoney(Math.abs(line.amount), reportAccounts[0]?.currency ?? 'PYG')}
                         </span>
                       </div>
                     );
