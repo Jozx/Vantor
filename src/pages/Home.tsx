@@ -48,6 +48,8 @@ import {
   PiggyBank,
   Receipt,
   ChartPie,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 type ChartRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
@@ -56,19 +58,22 @@ function PieTooltip({
   active,
   payload,
   currency,
+  showValues,
 }: {
   active?: boolean;
   payload?: TooltipPayloadEntry[];
   currency: Currency;
+  showValues: boolean;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const entry = payload[0];
+  const display = showValues
+    ? formatMoney(Math.round(entry.value as number), currency)
+    : `***.*** ${currency}`;
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 shadow-lg text-xs">
       <span className="font-bold text-zinc-900 dark:text-zinc-50">{entry.name}</span>
-      <span className="text-zinc-500 dark:text-zinc-400 ml-1.5">
-        {formatMoney(Math.round(entry.value as number), currency)}
-      </span>
+      <span className="text-zinc-500 dark:text-zinc-400 ml-1.5">{display}</span>
     </div>
   );
 }
@@ -93,6 +98,7 @@ export default function Home() {
   const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseTagBreakdown[]>([]);
   const [expenseLoading, setExpenseLoading] = useState(false);
   const [pieCurrency, setPieCurrency] = useState<Currency>('PYG');
+  const [showValues, setShowValues] = useState(true);
 
   // Net worth chart state
   const [chartRange, setChartRange] = useState<ChartRange>('1Y');
@@ -307,6 +313,11 @@ export default function Home() {
     return currencies.size > 1;
   };
 
+  const showAmount = (value: number, currency: Currency | string) => {
+    if (!showValues) return `***.*** ${currency}`;
+    return formatMoney(value, currency as Currency);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300 pb-24 sm:pb-6">
       {/* Header */}
@@ -317,16 +328,29 @@ export default function Home() {
             Overview of your financial accounts
           </p>
         </div>
-        <button
-          onClick={() => setShowQuickTx(true)}
-          className={cn(
-            buttonVariants({ variant: 'default' }),
-            'hidden md:flex gap-2 bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-lg shrink-0'
-          )}
-        >
-          <Zap className="h-4 w-4" />
-          Add Transaction
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowValues((v) => !v)}
+            className={cn(
+              buttonVariants({ variant: 'outline', size: 'sm' }),
+              'gap-1.5 text-xs font-semibold cursor-pointer'
+            )}
+            title={showValues ? 'Hide amounts' : 'Show amounts'}
+          >
+            {showValues ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showValues ? 'Hide' : 'Show'}
+          </button>
+          <button
+            onClick={() => setShowQuickTx(true)}
+            className={cn(
+              buttonVariants({ variant: 'default' }),
+              'hidden md:flex gap-2 bg-zinc-900 dark:bg-zinc-50 text-zinc-50 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 cursor-pointer shadow-lg shrink-0'
+            )}
+          >
+            <Zap className="h-4 w-4" />
+            Add Transaction
+          </button>
+        </div>
       </div>
 
       {/* Loading State */}
@@ -367,10 +391,10 @@ export default function Home() {
               <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Assets</span>
             </div>
             <p className="text-xl font-extrabold text-emerald-700 dark:text-emerald-300">
-              {formatMoney(netWorth.assetsPyg, 'PYG')}
+              {showAmount(netWorth.assetsPyg, 'PYG')}
             </p>
             <p className="text-sm font-bold text-emerald-600/60 dark:text-emerald-400/60 mt-0.5">
-              {formatMoney(netWorth.assetsUsd, 'USD')}
+              {showAmount(netWorth.assetsUsd, 'USD')}
             </p>
           </div>
           <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/10">
@@ -379,10 +403,10 @@ export default function Home() {
               <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Liabilities</span>
             </div>
             <p className="text-xl font-extrabold text-rose-700 dark:text-rose-300">
-              {formatMoney(netWorth.liabilitiesPyg, 'PYG')}
+              {showAmount(netWorth.liabilitiesPyg, 'PYG')}
             </p>
             <p className="text-sm font-bold text-rose-600/60 dark:text-rose-400/60 mt-0.5">
-              {formatMoney(netWorth.liabilitiesUsd, 'USD')}
+              {showAmount(netWorth.liabilitiesUsd, 'USD')}
             </p>
           </div>
           <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
@@ -396,7 +420,7 @@ export default function Home() {
                 ? 'text-blue-700 dark:text-blue-300'
                 : 'text-rose-700 dark:text-rose-300'
             )}>
-              {formatMoney(netWorth.totalPyg, 'PYG')}
+              {showAmount(netWorth.totalPyg, 'PYG')}
             </p>
             <p className={cn(
               'text-sm font-bold mt-0.5',
@@ -404,7 +428,7 @@ export default function Home() {
                 ? 'text-blue-600/60 dark:text-blue-400/60'
                 : 'text-rose-600/60 dark:text-rose-400/60'
             )}>
-              {formatMoney(netWorth.totalUsd, 'USD')}
+              {showAmount(netWorth.totalUsd, 'USD')}
             </p>
           </div>
         </div>
@@ -487,6 +511,7 @@ export default function Home() {
                 <YAxis
                   tick={{ fontSize: 11 }}
                   tickFormatter={(value: number) => {
+                    if (!showValues) return '***';
                     if (value >= 1000000) {
                       return `${(value / 1000000).toFixed(1)}M`;
                     }
@@ -497,7 +522,7 @@ export default function Home() {
                   }}
                 />
                 <Tooltip
-                  formatter={(value) => [formatMoney(Number(value), chartCurrency), chartCurrency]}
+                  formatter={(value) => [showAmount(Number(value), chartCurrency), chartCurrency]}
                   labelFormatter={(label) => new Date(String(label)).toLocaleDateString()}
                 />
                 <Line
@@ -568,7 +593,7 @@ export default function Home() {
                     <Cell key={index} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip content={<PieTooltip currency={pieCurrency} />} />
+                <Tooltip content={<PieTooltip currency={pieCurrency} showValues={showValues} />} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -584,7 +609,7 @@ export default function Home() {
                 />
                 <span className="text-zinc-600 dark:text-zinc-400">{entry.name}</span>
                 <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  {formatMoney(Math.round(entry.value), pieCurrency)}
+                  {showAmount(Math.round(entry.value), pieCurrency)}
                 </span>
               </div>
             ))}
@@ -630,15 +655,15 @@ export default function Home() {
                         .filter(([, v]) => v !== 0)
                         .map(([cur, t]) => (
                           <span key={cur} className="leading-tight">
-                            {type === 'credit_card' ? formatMoney(Math.abs(t), cur as Currency) : formatMoney(t, cur as Currency)}
+                            {type === 'credit_card' ? showAmount(Math.abs(t), cur as Currency) : showAmount(t, cur as Currency)}
                           </span>
                         ))
                       }
                     </div>
                   ) : (
                     type === 'credit_card'
-                      ? formatMoney(Math.abs(total), accounts.find((a) => a.type === type)?.currency ?? 'PYG')
-                      : formatMoney(total, accounts.find((a) => a.type === type)?.currency ?? 'PYG')
+                      ? showAmount(Math.abs(total), accounts.find((a) => a.type === type)?.currency ?? 'PYG')
+                      : showAmount(total, accounts.find((a) => a.type === type)?.currency ?? 'PYG')
                   )
                   : '—'
                 }
@@ -648,7 +673,7 @@ export default function Home() {
                 if (creditLimit <= 0) return null;
                 return (
                   <div className="mt-1 text-xs text-zinc-400">
-                    owed · {formatMoney(creditLimit, accounts.find((a) => a.type === 'credit_card')?.currency ?? 'PYG')} limit
+                    owed · {showAmount(creditLimit, accounts.find((a) => a.type === 'credit_card')?.currency ?? 'PYG')} limit
                   </div>
                 );
               })()}
@@ -657,7 +682,7 @@ export default function Home() {
                 if (cash === 0) return null;
                 return (
                   <div className="mt-1 text-xs text-zinc-400">
-                    + {formatMoney(cash, accounts.find((a) => a.type === type)?.currency ?? 'PYG')} cash
+                    + {showAmount(cash, accounts.find((a) => a.type === type)?.currency ?? 'PYG')} cash
                   </div>
                 );
               })()}
