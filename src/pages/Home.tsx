@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { getAccounts, getCashBalanceBatch, computeNetWorth, type AccountWithBalance } from '@/services/financeService';
+import { getAccounts, getCashBalanceBatch, computeNetWorth, getExpenseBreakdownByTag, type AccountWithBalance, type ExpenseTagBreakdown } from '@/services/financeService';
 import type { NetWorthResult } from '@/services/financeService';
 import {
   getNetWorthHistory,
@@ -27,7 +27,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
+import type { TooltipPayloadEntry } from 'recharts';
 import {
   TrendingUp,
   CircleDollarSign,
@@ -43,9 +47,31 @@ import {
   Zap,
   PiggyBank,
   Receipt,
+  ChartPie,
 } from 'lucide-react';
 
 type ChartRange = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+
+function PieTooltip({
+  active,
+  payload,
+  currency,
+}: {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  currency: Currency;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const entry = payload[0];
+  return (
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 shadow-lg text-xs">
+      <span className="font-bold text-zinc-900 dark:text-zinc-50">{entry.name}</span>
+      <span className="text-zinc-500 dark:text-zinc-400 ml-1.5">
+        {formatMoney(Math.round(entry.value as number), currency)}
+      </span>
+    </div>
+  );
+}
 
 export default function Home() {
   const { resolved } = useTheme();
@@ -64,6 +90,9 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showQuickTx, setShowQuickTx] = useState(false);
   const [netWorth, setNetWorth] = useState<NetWorthResult | null>(null);
+  const [expenseBreakdown, setExpenseBreakdown] = useState<ExpenseTagBreakdown[]>([]);
+  const [expenseLoading, setExpenseLoading] = useState(false);
+  const [pieCurrency, setPieCurrency] = useState<Currency>('PYG');
 
   // Net worth chart state
   const [chartRange, setChartRange] = useState<ChartRange>('1Y');
@@ -144,6 +173,43 @@ export default function Home() {
     window.addEventListener('networth-snapshot-created', handleSnapshot);
     return () => window.removeEventListener('networth-snapshot-created', handleSnapshot);
   }, [chartRange]);
+
+  // Current month date range for the pie chart
+  const currentMonthRange = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const from = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const to = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    return { from, to };
+  }, []);
+
+  // Load expense breakdown for the current month
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setExpenseLoading(true);
+      try {
+        const data = await getExpenseBreakdownByTag(currentMonthRange.from, currentMonthRange.to);
+        if (!cancelled) setExpenseBreakdown(data);
+      } catch (err) {
+        console.error('Failed to load expense breakdown:', err);
+      } finally {
+        if (!cancelled) setExpenseLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentMonthRange.from, currentMonthRange.to]);
+
+  // Derive pie chart data from the selected currency
+  const pieChartData = useMemo(() => {
+    return expenseBreakdown.map((entry) => ({
+      name: entry.name,
+      value: pieCurrency === 'PYG' ? entry.valuePyg : entry.valueUsd,
+      color: entry.color,
+    }));
+  }, [expenseBreakdown, pieCurrency]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -444,6 +510,84 @@ export default function Home() {
                 />
               </LineChart>
             </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Spending by Tag Pie Chart */}
+      {!loading && !loadError && (
+      <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 shadow-xs">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <ChartPie className="h-4 w-4 text-zinc-400" />
+            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              Spending This Month
+            </h4>
+          </div>
+          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-0.5 shrink-0">
+            {(['PYG', 'USD'] as Currency[]).map((curr) => (
+              <button
+                key={curr}
+                onClick={() => setPieCurrency(curr)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer',
+                  pieCurrency === curr
+                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300',
+                )}
+              >
+                {curr}
+              </button>
+            ))}
+          </div>
+        </div>
+        {expenseLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+          </div>
+        ) : expenseBreakdown.length === 0 ? (
+          <div className="text-center py-12 text-zinc-400 text-sm">
+            No expenses or charges this month.
+          </div>
+        ) : (
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieChartData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={90}
+                  innerRadius={45}
+                  paddingAngle={2}
+                >
+                  {pieChartData.map((entry, index) => (
+                    <Cell key={index} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip content={<PieTooltip currency={pieCurrency} />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        {/* Legend */}
+        {pieChartData.length > 0 && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            {pieChartData.map((entry) => (
+              <div key={entry.name} className="flex items-center gap-1.5 text-xs">
+                <span
+                  className="h-2.5 w-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-zinc-600 dark:text-zinc-400">{entry.name}</span>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  {formatMoney(Math.round(entry.value), pieCurrency)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -204,7 +204,7 @@ export default function CashFlow() {
 
           {/* Month picker (when specificMonth) */}
           {periodMode === 'specificMonth' && (
-            <Select value={String(selectedMonth)} onValueChange={(val: string) => setSelectedMonth(Number(val))}>
+            <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
               <SelectTrigger className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 w-auto">
                 <SelectValue />
               </SelectTrigger>
@@ -217,7 +217,7 @@ export default function CashFlow() {
           )}
 
           {/* Year picker */}
-          <Select value={String(selectedYear)} onValueChange={(val: string) => setSelectedYear(Number(val))}>
+          <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
             <SelectTrigger className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 w-auto">
               <SelectValue />
             </SelectTrigger>

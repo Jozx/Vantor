@@ -632,7 +632,7 @@ export default function AccountDetails() {
                     <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                       Market
                     </label>
-                    <Select value={tradeMarket} onValueChange={(val: string) => setTradeMarket(val)}>
+                    <Select value={tradeMarket} onValueChange={(val) => setTradeMarket(val ?? '')}>
                       <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                         <SelectValue />
                       </SelectTrigger>
@@ -777,7 +777,7 @@ export default function AccountDetails() {
                     </label>
                     <Select
                       value={chargeTagId === null ? undefined : chargeTagId === -1 ? '__custom__' : String(chargeTagId)}
-                      onValueChange={(val: string) => {
+                      onValueChange={(val) => {
                         if (val === '__custom__') {
                           setChargeTagId(-1);
                           setChargeCustomTag('');
@@ -850,7 +850,7 @@ export default function AccountDetails() {
                     </label>
                     <Select
                       value={payFromAccountId !== null ? String(payFromAccountId) : undefined}
-                      onValueChange={(val: string) => setPayFromAccountId(val ? Number(val) : null)}
+                      onValueChange={(val) => setPayFromAccountId(val ? Number(val) : null)}
                     >
                       <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                         <SelectValue placeholder="Select bank account..." />
@@ -928,7 +928,7 @@ export default function AccountDetails() {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                     Transaction Type
                   </label>
-                  <Select value={cashType} onValueChange={(val: string) => setCashType(val as CashTransactionType)}>
+                  <Select value={cashType} onValueChange={(val) => setCashType((val ?? '') as CashTransactionType)}>
                     <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                       <SelectValue />
                     </SelectTrigger>
@@ -1002,7 +1002,7 @@ export default function AccountDetails() {
                   </label>
                   <Select
                     value={cashTagId === null ? undefined : cashTagId === -1 ? '__custom__' : String(cashTagId)}
-                    onValueChange={(val: string) => {
+                    onValueChange={(val) => {
                       if (val === '__custom__') {
                         setCashTagId(-1);
                         setCustomTagName('');
@@ -1427,7 +1427,7 @@ export default function AccountDetails() {
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Tag</label>
                 <Select
                   value={editTagId !== null ? String(editTagId) : undefined}
-                  onValueChange={(val: string) => setEditTagId(val ? Number(val) : null)}
+                  onValueChange={(val) => setEditTagId(val ? Number(val) : null)}
                 >
                   <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                     <SelectValue placeholder="No tag" />

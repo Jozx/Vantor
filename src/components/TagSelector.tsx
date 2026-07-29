@@ -75,7 +75,7 @@ export default function TagSelector({
       )}
       <Select
         value={value === null ? undefined : value === -1 ? '__custom__' : String(value)}
-        onValueChange={(val: string) => handleChange(val)}
+        onValueChange={(val) => handleChange(val ?? '')}
       >
         <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
           <SelectValue placeholder={noTagLabel} />

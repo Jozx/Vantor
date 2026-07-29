@@ -265,7 +265,7 @@ export default function Reports() {
 
         {/* Month / Year */}
         <div className="flex gap-2">
-          <Select value={String(selectedMonth)} onValueChange={(val: string) => setSelectedMonth(Number(val))}>
+          <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
             <SelectTrigger className="appearance-none bg-white dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl px-3 py-2 pr-8 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer w-auto">
               <SelectValue />
             </SelectTrigger>
@@ -275,7 +275,7 @@ export default function Reports() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={String(selectedYear)} onValueChange={(val: string) => setSelectedYear(Number(val))}>
+          <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
             <SelectTrigger className="appearance-none bg-white dark:bg-zinc-900/60 border border-zinc-200/50 dark:border-zinc-800/50 rounded-xl px-3 py-2 pr-8 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer w-auto">
               <SelectValue />
             </SelectTrigger>
@@ -294,79 +294,84 @@ export default function Reports() {
           <ArrowLeftRight className="h-6 w-6 animate-spin text-zinc-400 mb-2" />
           <span className="text-sm text-zinc-500 dark:text-zinc-400">Generating report...</span>
         </div>
-      ) : reportAccounts.length === 0 ? (
-        <div className="text-center py-12 text-zinc-400 text-sm">
-          No accounts of this type. Create one first.
-        </div>
       ) : (
         <div className="space-y-6">
-          {/* Report Header */}
-          <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 shadow-xs">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  {accountTypeConfig[reportType].label} — {MONTHS[selectedMonth]} {selectedYear}
-                </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  {reportAccounts.length} account{reportAccounts.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-              <div className={cn(
-                'p-2 rounded-lg',
-                accountTypeConfig[reportType].colorClass
-              )}>
-                {(() => { const Icon = accountTypeConfig[reportType].icon; return <Icon className="h-5 w-5" />; })()}
-              </div>
+          {reportAccounts.length === 0 ? (
+            <div className="text-center py-12 text-zinc-400 text-sm">
+              No accounts of this type. Create one first.
             </div>
-
-            {/* Lines */}
-            <div className="space-y-3">
-              {lines.map((line) => {
-                const Icon = line.icon;
-                const colorMap = {
-                  emerald: 'text-emerald-600 dark:text-emerald-400',
-                  rose: 'text-rose-600 dark:text-rose-400',
-                  blue: 'text-blue-600 dark:text-blue-400',
-                  zinc: 'text-zinc-600 dark:text-zinc-400',
-                };
-                return (
-                  <div key={line.label} className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
-                    <div className="flex items-center gap-2.5">
-                      <Icon className={cn('h-4 w-4', colorMap[line.color])} />
-                      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{line.label}</span>
-                    </div>
-                    <span className={cn(
-                      'text-sm font-bold tabular-nums',
-                      line.amount >= 0
-                        ? 'text-zinc-900 dark:text-zinc-50'
-                        : 'text-rose-600 dark:text-rose-400'
-                    )}>
-                      {line.amount >= 0 ? '+' : ''}{formatMoney(Math.abs(line.amount), reportAccounts[0]?.currency ?? 'PYG')}
-                    </span>
+          ) : (
+            <>
+              {/* Report Header */}
+              <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 shadow-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      {accountTypeConfig[reportType].label} — {MONTHS[selectedMonth]} {selectedYear}
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {reportAccounts.length} account{reportAccounts.length !== 1 ? 's' : ''}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  <div className={cn(
+                    'p-2 rounded-lg',
+                    accountTypeConfig[reportType].colorClass
+                  )}>
+                    {(() => { const Icon = accountTypeConfig[reportType].icon; return <Icon className="h-5 w-5" />; })()}
+                  </div>
+                </div>
 
-          {/* Account Breakdown */}
-          {reportAccounts.length > 1 && (
-            <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 shadow-xs">
-              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Per Account</h4>
-              <div className="space-y-2">
-                {reportAccounts.map((acc) => (
-                  <Link
-                    key={acc.id}
-                    to={`/accounts/${acc.id}`}
-                    className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
-                  >
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{acc.name}</span>
-                    <span className="text-xs text-zinc-400">{acc.currency} · {acc.institution || '—'}</span>
-                  </Link>
-                ))}
+                {/* Lines */}
+                <div className="space-y-3">
+                  {lines.map((line) => {
+                    const Icon = line.icon;
+                    const colorMap = {
+                      emerald: 'text-emerald-600 dark:text-emerald-400',
+                      rose: 'text-rose-600 dark:text-rose-400',
+                      blue: 'text-blue-600 dark:text-blue-400',
+                      zinc: 'text-zinc-600 dark:text-zinc-400',
+                    };
+                    return (
+                      <div key={line.label} className="flex items-center justify-between py-2 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+                        <div className="flex items-center gap-2.5">
+                          <Icon className={cn('h-4 w-4', colorMap[line.color])} />
+                          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{line.label}</span>
+                        </div>
+                        <span className={cn(
+                          'text-sm font-bold tabular-nums',
+                          line.amount >= 0
+                            ? 'text-zinc-900 dark:text-zinc-50'
+                            : 'text-rose-600 dark:text-rose-400'
+                        )}>
+                          {line.amount >= 0 ? '+' : ''}{formatMoney(Math.abs(line.amount), reportAccounts[0]?.currency ?? 'PYG')}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+
+              {/* Account Breakdown */}
+              {reportAccounts.length > 1 && (
+                <div className="bg-white dark:bg-zinc-900/60 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 p-6 shadow-xs">
+                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Per Account</h4>
+                  <div className="space-y-2">
+                    {reportAccounts.map((acc) => (
+                      <Link
+                        key={acc.id}
+                        to={`/accounts/${acc.id}`}
+                        className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                      >
+                        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{acc.name}</span>
+                        <span className="text-xs text-zinc-400">{acc.currency} · {acc.institution || '—'}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
+
         </div>
       )}
     </div>

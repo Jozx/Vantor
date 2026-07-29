@@ -705,6 +705,87 @@ export async function getAllCashTransactions(
   return (result.values ?? []) as CashTransactionWithAccount[];
 }
 
+// ─── Expense Breakdown by Tag (for pie chart) ────────────────────────────────
+
+export interface ExpenseTagBreakdown {
+  name: string;
+  valuePyg: number;
+  valueUsd: number;
+  color: string;
+}
+
+/**
+ * Query expense/charge transactions for a date range grouped by tag,
+ * with amounts in both PYG and USD. Returns data suitable for a pie chart.
+ */
+export async function getExpenseBreakdownByTag(
+  from: string,
+  to: string,
+): Promise<ExpenseTagBreakdown[]> {
+  const repos = await getRepos();
+  const db = await getDb();
+
+  // Fetch FX rates for both directions
+  const [ratePygToUsd, rateUsdToPyg] = await Promise.all([
+    repos.marketData.latestFxRate('PYG', 'USD'),
+    repos.marketData.latestFxRate('USD', 'PYG'),
+  ]);
+  const pygToUsd = ratePygToUsd?.rate ?? 1;
+  const usdToPyg = rateUsdToPyg?.rate ?? 1;
+
+  const result = await db.query(
+    `SELECT ct.amount, ct.tag_id, ct.description,
+            t.name AS tag_name, t.color AS tag_color,
+            a.currency AS account_currency
+       FROM cash_transactions ct
+  LEFT JOIN tags t  ON t.id = ct.tag_id
+       JOIN accounts a ON a.id = ct.account_id
+      WHERE ct.type IN ('expense', 'charge')
+        AND ct.occurred_at >= ? AND ct.occurred_at <= ?
+      ORDER BY ct.occurred_at ASC`,
+    [from, to],
+  );
+
+  const rows = (result.values ?? []) as {
+    amount: number;
+    tag_id: number | null;
+    description: string;
+    tag_name: string | null;
+    tag_color: string | null;
+    account_currency: string;
+  }[];
+
+  const byTag = new Map<string, ExpenseTagBreakdown>();
+
+  for (const row of rows) {
+    let amountPyg: number;
+    let amountUsd: number;
+
+    if (row.account_currency === 'PYG') {
+      amountPyg = row.amount;
+      amountUsd = row.amount * pygToUsd;
+    } else {
+      amountUsd = row.amount;
+      amountPyg = row.amount * usdToPyg;
+    }
+
+    const tagName = row.tag_name
+      ? displayTag(row.tag_name, row.description)
+      : 'Uncategorised';
+    const tagColor = row.tag_color ?? '#6b7280';
+
+    const existing = byTag.get(tagName);
+    if (existing) {
+      existing.valuePyg += amountPyg;
+      existing.valueUsd += amountUsd;
+    } else {
+      byTag.set(tagName, { name: tagName, valuePyg: amountPyg, valueUsd: amountUsd, color: tagColor });
+    }
+  }
+
+  return [...byTag.values()];
+}
+
 // ─── Cash Flow Sankey ────────────────────────────────────────────────────────
 
 export interface CashFlowPeriod {

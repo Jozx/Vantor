@@ -75,7 +75,7 @@ export class CashLedgerRepo {
     const result = await this.db.query(
       `SELECT
          a.id AS account_id,
-         a.opening_balance +
+         CASE WHEN a.type = 'credit_card' THEN -a.opening_balance ELSE a.opening_balance END +
          COALESCE(SUM(
            CASE ct.type
              WHEN 'income'            THEN  ct.amount
@@ -175,7 +175,7 @@ export class CashLedgerRepo {
 
     const result = await this.db.query(
       `SELECT
-         a.opening_balance +
+         CASE WHEN a.type = 'credit_card' THEN -a.opening_balance ELSE a.opening_balance END +
          COALESCE(SUM(
            CASE ct.type
              WHEN 'income'            THEN  ct.amount

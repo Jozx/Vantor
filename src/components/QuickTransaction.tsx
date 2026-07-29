@@ -322,7 +322,7 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
               </label>
               <Select
                 value={fromAccountId !== null ? String(fromAccountId) : undefined}
-                onValueChange={(val: string) => {
+                onValueChange={(val) => {
                   setFromAccountId(val ? Number(val) : null);
                   setToAccountId(null);
                 }}
@@ -360,7 +360,7 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                 </label>
                 <Select
                   value={toAccountId !== null ? String(toAccountId) : undefined}
-                  onValueChange={(val: string) => setToAccountId(val ? Number(val) : null)}
+                  onValueChange={(val) => setToAccountId(val ? Number(val) : null)}
                 >
                   <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50">
                     <SelectValue placeholder="Select account..." />
@@ -417,7 +417,7 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                 </label>
                 <Select
                   value={tagId === null ? undefined : tagId === -1 ? '__custom__' : String(tagId)}
-                  onValueChange={(val: string) => {
+                  onValueChange={(val) => {
                     if (val === '__custom__') {
                       setTagId(-1);
                       setCustomTagName('');

@@ -498,7 +498,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                     Account Type
                   </label>
-                  <Select value={type} onValueChange={(val: string) => setType(val as AccountType)}>
+                  <Select value={type} onValueChange={(val) => setType((val ?? '') as AccountType)}>
                     <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                       <SelectValue />
                     </SelectTrigger>
@@ -514,7 +514,7 @@ export default function Accounts({ filterType }: AccountsProps) {
                   <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1.5">
                     Currency
                   </label>
-                  <Select value={currency} onValueChange={(val: string) => setCurrency(val as Currency)}>
+                  <Select value={currency} onValueChange={(val) => setCurrency((val ?? '') as Currency)}>
                     <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                       <SelectValue />
                     </SelectTrigger>

@@ -274,7 +274,7 @@ export default function Transactions() {
             </label>
             <Select
               value={filterAccount !== '' ? String(filterAccount) : undefined}
-              onValueChange={(val: string) => setFilterAccount(val ? Number(val) : '')}
+              onValueChange={(val) => setFilterAccount(val ? Number(val) : '')}
             >
               <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
                 <SelectValue placeholder="All accounts" />
@@ -295,7 +295,7 @@ export default function Transactions() {
             </label>
             <Select
               value={filterTag !== '' ? String(filterTag) : undefined}
-              onValueChange={(val: string) => setFilterTag(val ? Number(val) : '')}
+              onValueChange={(val) => setFilterTag(val ? Number(val) : '')}
             >
               <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
                 <SelectValue placeholder="All tags" />
@@ -316,7 +316,7 @@ export default function Transactions() {
             </label>
             <Select
               value={filterType || undefined}
-              onValueChange={(val: string) => setFilterType(val as CashTransactionType | '')}
+              onValueChange={(val) => setFilterType((val ?? '') as CashTransactionType | '')}
             >
               <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
                 <SelectValue placeholder="All types" />
@@ -543,7 +543,7 @@ export default function Transactions() {
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Tag</label>
                 <Select
                   value={editTagId !== null ? String(editTagId) : undefined}
-                  onValueChange={(val: string) => setEditTagId(val ? Number(val) : null)}
+                  onValueChange={(val) => setEditTagId(val ? Number(val) : null)}
                 >
                   <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                     <SelectValue placeholder="No tag" />
