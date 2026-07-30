@@ -792,6 +792,10 @@ export default function AccountDetails() {
                           setChargeTagId(Number(val) || null);
                         }
                       }}
+                      items={{
+                        ...Object.fromEntries(tags.map((tag) => [String(tag.id), tag.name])),
+                        __custom__: 'Other (custom)...',
+                      }}
                     >
                       <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                         <SelectValue placeholder="Select a tag..." />
@@ -858,6 +862,7 @@ export default function AccountDetails() {
                     <Select
                       value={payFromAccountId !== null ? String(payFromAccountId) : undefined}
                       onValueChange={(val) => setPayFromAccountId(val ? Number(val) : null)}
+                      items={Object.fromEntries(bankAccounts.map((a) => [String(a.id), `${a.name} (${a.currency})`]))}
                     >
                       <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                         <SelectValue placeholder="Select bank account..." />
@@ -1016,6 +1021,10 @@ export default function AccountDetails() {
                       } else {
                         setCashTagId(Number(val) || null);
                       }
+                    }}
+                    items={{
+                      ...Object.fromEntries(tags.map((tag) => [String(tag.id), tag.name])),
+                      __custom__: 'Other (custom)...',
                     }}
                   >
                     <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
@@ -1435,6 +1444,7 @@ export default function AccountDetails() {
                 <Select
                   value={editTagId !== null ? String(editTagId) : undefined}
                   onValueChange={(val) => setEditTagId(val ? Number(val) : null)}
+                  items={Object.fromEntries(tags.map((tag) => [String(tag.id), tag.name]))}
                 >
                   <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                     <SelectValue placeholder="No tag" />

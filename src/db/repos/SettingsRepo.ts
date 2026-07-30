@@ -48,7 +48,7 @@ export class SettingsRepo {
    */
   private static VALID_COLUMNS = new Set(['stock_api_key', 'fx_api_key', 'base_currency', 'theme']);
 
-  async update(data: Partial<Omit<Settings, 'id'>>): Promise<void> {
+  async update(data: Partial<Omit<Settings, 'id'>>, transaction = true): Promise<void> {
     const entries = Object.entries(data).filter(([col, v]) => v !== undefined && SettingsRepo.VALID_COLUMNS.has(col));
     if (entries.length === 0) return;
     const encrypted = await Promise.all(
@@ -64,6 +64,7 @@ export class SettingsRepo {
     await this.db.run(
       `UPDATE settings SET ${setClause} WHERE id = 1`,
       values,
+      transaction,
     );
   }
 

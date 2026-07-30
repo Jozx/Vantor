@@ -12,10 +12,11 @@ export class TagRepo {
   // ── Write ─────────────────────────────────────────────────────────────────
 
   /** Create a custom tag and return its generated id. */
-  async create(data: Omit<Tag, 'id'>): Promise<number> {
+  async create(data: Omit<Tag, 'id'>, transaction = true): Promise<number> {
     const result = await this.db.run(
       'INSERT INTO tags (name, color, is_custom) VALUES (?, ?, ?)',
       [data.name, data.color, data.is_custom],
+      transaction,
     );
     return result.changes?.lastId ?? 0;
   }

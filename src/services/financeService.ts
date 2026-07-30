@@ -71,17 +71,17 @@ export async function getAccountById(id: number): Promise<Account | undefined> {
 
 export async function createAccount(data: Omit<Account, 'id'>): Promise<number> {
   const repos = await getRepos();
-  return withTransaction(async () => repos.accounts.create(data));
+  return withTransaction(async () => repos.accounts.create(data, false));
 }
 
 export async function updateAccount(id: number, data: Partial<Omit<Account, 'id'>>): Promise<void> {
   const repos = await getRepos();
-  await withTransaction(async () => repos.accounts.update(id, data));
+  await withTransaction(async () => repos.accounts.update(id, data, false));
 }
 
 export async function deleteAccount(id: number): Promise<void> {
   const repos = await getRepos();
-  await withTransaction(async () => repos.accounts.remove(id));
+  await withTransaction(async () => repos.accounts.remove(id, false));
 }
 
 // ─── Cash Ledger Services ─────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ export async function addCashTransaction(data: Omit<CashTransaction, 'id'>): Pro
   const repos = await getRepos();
   const account = await repos.accounts.findById(data.account_id);
   if (!account) throw new Error('Account not found');
-  return withTransaction(async () => repos.cashLedger.create(data));
+  return withTransaction(async () => repos.cashLedger.create(data, false));
 }
 
 /**
@@ -555,7 +555,7 @@ export async function getTags(): Promise<Tag[]> {
 
 export async function createTag(data: { name: string; color: string }): Promise<number> {
   const repos = await getRepos();
-  return withTransaction(async () => repos.tags.create({ name: data.name, color: data.color, is_custom: 1 }));
+  return withTransaction(async () => repos.tags.create({ name: data.name, color: data.color, is_custom: 1 }, false));
 }
 
 // ─── Settings Services ──────────────────────────────────────────────────────
@@ -567,7 +567,7 @@ export async function getSettings(): Promise<Settings> {
 
 export async function updateSettings(data: Partial<Omit<Settings, 'id'>>): Promise<void> {
   const repos = await getRepos();
-  await withTransaction(async () => repos.settings.update(data));
+  await withTransaction(async () => repos.settings.update(data, false));
 }
 
 // ─── Mutual Fund Accrual Engine ──────────────────────────────────────────────

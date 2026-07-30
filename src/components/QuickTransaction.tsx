@@ -326,6 +326,7 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                   setFromAccountId(val ? Number(val) : null);
                   setToAccountId(null);
                 }}
+                items={Object.fromEntries(fromAccounts.map((a) => [String(a.id), `${a.name} (${a.currency})`]))}
               >
                 <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50">
                   <SelectValue placeholder="Select account..." />
@@ -361,6 +362,7 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                 <Select
                   value={toAccountId !== null ? String(toAccountId) : undefined}
                   onValueChange={(val) => setToAccountId(val ? Number(val) : null)}
+                  items={Object.fromEntries(toAccounts.map((a) => [String(a.id), `${a.name} (${a.currency})`]))}
                 >
                   <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50">
                     <SelectValue placeholder="Select account..." />
@@ -424,6 +426,10 @@ export default function QuickTransaction({ open, onClose, onCreated }: QuickTran
                     } else {
                       setTagId(Number(val) || null);
                     }
+                  }}
+                  items={{
+                    ...Object.fromEntries(tags.map((tag) => [String(tag.id), tag.name])),
+                    __custom__: 'Other (custom)...',
                   }}
                 >
                   <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-50 outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50">

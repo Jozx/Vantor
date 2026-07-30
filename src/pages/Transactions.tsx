@@ -277,6 +277,7 @@ export default function Transactions() {
             <Select
               value={filterAccount !== '' ? String(filterAccount) : undefined}
               onValueChange={(val) => setFilterAccount(val ? Number(val) : '')}
+              items={Object.fromEntries(accounts.map((acc) => [String(acc.id), acc.name]))}
             >
               <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
                 <SelectValue placeholder="All accounts" />
@@ -298,6 +299,7 @@ export default function Transactions() {
             <Select
               value={filterTag !== '' ? String(filterTag) : undefined}
               onValueChange={(val) => setFilterTag(val ? Number(val) : '')}
+              items={Object.fromEntries(tags.map((tag) => [String(tag.id), tag.name]))}
             >
               <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900">
                 <SelectValue placeholder="All tags" />
@@ -546,6 +548,7 @@ export default function Transactions() {
                 <Select
                   value={editTagId !== null ? String(editTagId) : undefined}
                   onValueChange={(val) => setEditTagId(val ? Number(val) : null)}
+                  items={Object.fromEntries(tags.map((tag) => [String(tag.id), tag.name]))}
                 >
                   <SelectTrigger className="w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent px-3 py-1.5 text-sm outline-hidden focus:border-zinc-900 dark:focus:border-zinc-50 focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-50">
                     <SelectValue placeholder="No tag" />
